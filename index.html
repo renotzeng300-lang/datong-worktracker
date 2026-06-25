@@ -1268,27 +1268,49 @@ function checkAccessCode(){
 }
 function startApp(){
   document.getElementById('app').innerHTML = '<div class="empty">連線中…</div>';
-  try{
-    firebase.initializeApp(FIREBASE_CONFIG);
-  }catch(e){
-    document.getElementById('app').innerHTML = '<div class="empty">Firebase 初始化失敗：'+escapeHtml(e.message)+'</div>';
+
+  if(typeof firebase==='undefined'){
+    document.getElementById('app').innerHTML = '<div class="empty">Firebase 程式庫載入失敗。<br><span class="small-note">這通常是瀏覽器擴充功能（如廣告或追蹤封鎖工具）、防毒軟體，或公司／機關網路擋掉了 www.gstatic.com 這個網域所造成。請嘗試：①暫時關閉廣告封鎖類擴充功能後重新整理頁面 ②換成手機行動網路或家用網路測試 ③換一台電腦或瀏覽器測試，確認是否與環境有關。</span></div>';
     return;
   }
-  const authRef = firebase.auth();
-  db = firebase.firestore();
-  authRef.onAuthStateChanged(function(user){
-    if(user){
-      ensureSeedData().then(function(){
-        attachListeners();
-        loadCurrentUserFromDevice();
-        render();
-      });
-    }else{
-      authRef.signInAnonymously().catch(function(err){
-        document.getElementById('app').innerHTML = '<div class="empty">連線失敗：'+escapeHtml(err.message)+'<br><span class="small-note">請確認 Firebase 設定金鑰是否正確，並已在 Authentication 啟用「匿名」登入方式。</span></div>';
-      });
+
+  let settled = false;
+  const timeoutId = setTimeout(function(){
+    if(!settled){
+      document.getElementById('app').innerHTML = '<div class="empty">連線逾時，伺服器沒有回應。<br><span class="small-note">請檢查網路連線是否正常，或是否有防火牆／公司網路阻擋了 Google Firebase 的連線（firebaseapp.com / googleapis.com / gstatic.com）。可以按 F12 開啟瀏覽器的「Console」分頁，查看是否有紅色錯誤訊息，並回報給系統管理人員協助排查。</span><br><button class="btn btn-sm" style="margin-top:10px;" onclick="location.reload()">重新整理頁面</button></div>';
     }
-  });
+  }, 10000);
+
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const authRef = firebase.auth();
+    db = firebase.firestore();
+    authRef.onAuthStateChanged(function(user){
+      settled = true;
+      clearTimeout(timeoutId);
+      if(user){
+        ensureSeedData().then(function(){
+          attachListeners();
+          loadCurrentUserFromDevice();
+          render();
+        }).catch(function(err){
+          document.getElementById('app').innerHTML = '<div class="empty">資料初始化失敗：'+escapeHtml(err.message)+'</div>';
+        });
+      }else{
+        authRef.signInAnonymously().catch(function(err){
+          document.getElementById('app').innerHTML = '<div class="empty">連線失敗：'+escapeHtml(err.message)+'<br><span class="small-note">請確認 Firebase 設定金鑰是否正確，並已在 Authentication 啟用「匿名」登入方式。</span></div>';
+        });
+      }
+    }, function(err){
+      settled = true;
+      clearTimeout(timeoutId);
+      document.getElementById('app').innerHTML = '<div class="empty">驗證連線失敗：'+escapeHtml(err.message)+'</div>';
+    });
+  }catch(e){
+    settled = true;
+    clearTimeout(timeoutId);
+    document.getElementById('app').innerHTML = '<div class="empty">Firebase 初始化失敗：'+escapeHtml(e.message)+'<br><span class="small-note">請確認檔案最上方 FIREBASE_CONFIG 裡六個欄位的值都已正確填入。</span></div>';
+  }
 }
 function boot(){
   if(isPlaceholderConfig()){ renderSetupNeededScreen(); return; }
