@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>大同發展中心工作管理平台</title>
+<style>
+  :root{
+    --bg:#F6F3EC;
+    --surface:#FFFFFF;
+    --ink:#2B2A28;
+    --ink-soft:#71695F;
+    --ink-faint:#A39B8E;
+    --line:#E3DDCD;
+    --accent:#2F6F62;
+    --accent-ink:#1E4A40;
+    --accent-soft:#E3EEE9;
+    --warn:#C0612F;
+    --warn-soft:#F5E4D7;
+    --cat-admin:#4A6FA5;
+    --cat-admin-soft:#E8EDF6;
+    --cat-finance:#7A5B33;
+    --cat-finance-soft:#F1E9DC;
+    --cat-env:#A9802A;
+    --cat-env-soft:#F4ECD9;
+    --cat-pro:#2F6F62;
+    --cat-pro-soft:#E3EEE9;
+    --cat-rights:#7A4768;
+    --cat-rights-soft:#F1E5ED;
+    --cat-innov:#5E7F4E;
+    --cat-innov-soft:#E9EFE3;
+    --cat-other:#7A746A;
+    --cat-other-soft:#EDEAE2;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(43,42,40,.06), 0 4px 14px rgba(43,42,40,.05);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei","Helvetica Neue",-apple-system,sans-serif;
+    font-size:14.5px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; letter-spacing:.01em;}
+  #app{min-height:100vh;}
+  a{color:var(--accent);}
+
+  .app-header{
+    position:sticky; top:0; z-index:20;
+    background:linear-gradient(180deg,var(--accent-ink),var(--accent));
+    color:#F4F8F6;
+    padding:14px 24px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    box-shadow:0 2px 10px rgba(0,0,0,.12);
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{
+    width:34px; height:34px; border-radius:9px;
+    background:#F4F8F6; color:var(--accent-ink);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:15px; flex:none;
+  }
+  .brand-text h1{font-size:15.5px; font-weight:700; margin:0;}
+  .brand-text p{font-size:11.5px; margin:0; opacity:.78;}
+  .user-chip{
+    display:flex; align-items:center; gap:10px;
+    background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.22);
+    border-radius:999px; padding:5px 8px 5px 14px;
+    font-size:12.5px;
+  }
+  .user-chip b{font-weight:700;}
+  .user-chip .role-tag{
+    background:rgba(255,255,255,.92); color:var(--accent-ink);
+    border-radius:999px; padding:2px 9px; font-size:11px; font-weight:700;
+  }
+  .user-chip button{
+    border:none; background:rgba(255,255,255,.18); color:#fff;
+    border-radius:999px; padding:5px 11px; font-size:12px; cursor:pointer;
+  }
+  .user-chip button:hover{background:rgba(255,255,255,.3);}
+
+  .container{max-width:1180px; margin:0 auto; padding:22px 24px 80px;}
+  .tabs{display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap;}
+  .tab{
+    padding:9px 16px; border-radius:999px; cursor:pointer;
+    font-size:13.5px; font-weight:600; color:var(--ink-soft);
+    border:1px solid transparent;
+  }
+  .tab:hover{background:var(--surface);}
+  .tab.active{background:var(--surface); color:var(--accent-ink); border-color:var(--line); box-shadow:var(--shadow);}
+  .tab .pill{
+    display:inline-block; margin-left:6px; background:var(--warn); color:#fff;
+    border-radius:999px; font-size:10.5px; padding:1px 6px; font-weight:700;
+  }
+
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);}
+  .section-title{font-size:15px; font-weight:700; margin:0 0 4px;}
+  .section-sub{font-size:12.5px; color:var(--ink-soft); margin:0 0 16px;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;}
+  .stat-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow);}
+  .stat-card .num{font-size:26px; font-weight:800; font-family:ui-monospace,monospace;}
+  .stat-card .lbl{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+  .stat-card.warn .num{color:var(--warn);}
+  .stat-card.good .num{color:var(--accent-ink);}
+
+  .cat-bars{padding:18px 20px;}
+  .cat-row{display:flex; align-items:center; gap:12px; padding:8px 0;}
+  .cat-row .cat-label{width:170px; font-size:12.8px; font-weight:600; flex:none; display:flex; align-items:center; gap:7px;}
+  .cat-row .track{flex:1; height:9px; border-radius:6px; background:#EFEAE0; overflow:hidden;}
+  .cat-row .fill{height:100%; border-radius:6px;}
+  .cat-row .pct{width:46px; text-align:right; font-size:12px; font-family:ui-monospace,monospace; color:var(--ink-soft); flex:none;}
+  .dot{width:9px; height:9px; border-radius:50%; flex:none; display:inline-block;}
+
+  .filter-bar{display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;}
+  select, input[type=text], input[type=date], input[type=number], textarea{
+    font-family:inherit; font-size:13px; padding:8px 10px;
+    border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink);
+  }
+  select:focus, input:focus, textarea:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  .btn{
+    border:1px solid var(--line); background:#fff; color:var(--ink);
+    padding:8px 14px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn-primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .btn-primary:hover{background:var(--accent-ink); border-color:var(--accent-ink);}
+  .btn-warn{background:var(--warn); border-color:var(--warn); color:#fff;}
+  .btn-ghost{background:transparent; border-color:transparent; color:var(--ink-soft);}
+  .btn-ghost:hover{color:var(--ink);}
+  .btn-sm{padding:5px 10px; font-size:12px;}
+  .spacer{flex:1;}
+
+  .task-list{display:flex; flex-direction:column; gap:10px;}
+  .task-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .task-head{display:flex; gap:14px; align-items:center; padding:14px 16px; cursor:pointer;}
+  .cat-stripe{width:5px; align-self:stretch; border-radius:4px; flex:none;}
+  .task-main{flex:1; min-width:0;}
+  .task-title-row{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;}
+  .task-title{font-weight:700; font-size:14.3px;}
+  .cat-badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px;}
+  .task-meta{display:flex; gap:14px; margin-top:5px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
+  .task-meta span{display:flex; align-items:center; gap:4px;}
+  .status-badge{font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; flex:none; white-space:nowrap;}
+  .ring-wrap{flex:none; position:relative; width:44px; height:44px;}
+  .ring-pct{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; font-family:ui-monospace,monospace;}
+  .overdue-flag{
+    background:var(--warn); color:#fff; font-size:10.5px; font-weight:700;
+    padding:2px 8px; border-radius:999px; flex:none; white-space:nowrap;
+  }
+  .review-flag{
+    font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px; flex:none; white-space:nowrap;
+  }
+  .chev{flex:none; color:var(--ink-faint); font-size:13px; transition:transform .15s;}
+  .task-card.open .chev{transform:rotate(90deg);}
+
+  .task-body{display:none; border-top:1px solid var(--line); padding:16px 18px; background:#FBFAF7;}
+  .task-card.open .task-body{display:block;}
+  .body-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:20px;}
+  @media (max-width:860px){ .body-grid{grid-template-columns:1fr;} .stat-grid{grid-template-columns:repeat(2,1fr);} .id-options{grid-template-columns:repeat(2,1fr) !important;} }
+
+  .log-list{display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto; padding-right:4px; margin-bottom:10px;}
+  .log-entry{background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px 11px;}
+  .log-entry .lhead{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-soft); margin-bottom:3px; gap:8px;}
+  .log-entry .lnote{font-size:13px; white-space:pre-wrap;}
+  .field-label{font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:5px; display:block;}
+  .field-block{margin-bottom:12px;}
+  .row-2{display:flex; gap:10px;}
+  .row-2>*{flex:1; min-width:0;}
+  textarea{width:100%; min-height:64px; resize:vertical;}
+  .director-box{background:var(--accent-soft); border:1px solid #CFE3DC; border-radius:8px; padding:12px;}
+  .director-box .field-label{color:var(--accent-ink);}
+  .small-note{font-size:11.5px; color:var(--ink-faint); margin-top:6px;}
+  select.full, textarea.full, input.full{width:100%;}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(43,42,40,.45);
+    display:flex; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal{
+    background:#fff; border-radius:14px; max-width:540px; width:100%;
+    max-height:88vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25);
+  }
+  .modal-head{padding:18px 22px 0; }
+  .modal-head h2{font-size:17px; margin:0 0 2px;}
+  .modal-head p{font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;}
+  .modal-body{padding:0 22px 22px;}
+  .modal-foot{padding:14px 22px 20px; display:flex; gap:10px; justify-content:flex-end; border-top:1px solid var(--line);}
+  .id-options{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px;}
+  .id-opt{border:1px solid var(--line); border-radius:8px; padding:10px 8px; text-align:center; font-size:13px; font-weight:600; cursor:pointer; background:#fff;}
+  .id-opt.sel{border-color:var(--accent); background:var(--accent-soft); color:var(--accent-ink);}
+
+  .empty{padding:50px 20px; text-align:center; color:var(--ink-soft);}
+  .empty .big{font-size:30px; margin-bottom:6px;}
+
+  #toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:999px; font-size:13px;
+    opacity:0; transition:opacity .2s, transform .2s; z-index:100; pointer-events:none;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  .activity-feed{display:flex; flex-direction:column; gap:10px; padding:18px 20px;}
+  .activity-item{display:flex; gap:10px; font-size:12.8px; border-bottom:1px dashed var(--line); padding-bottom:9px;}
+  .activity-item:last-child{border-bottom:none; padding-bottom:0;}
+  .activity-item .a-time{color:var(--ink-faint); flex:none; font-family:ui-monospace,monospace; font-size:11px; width:80px;}
+  .panel-pad{padding:18px 20px;}
+
+  .header-actions{display:flex; align-items:center; gap:10px;}
+  .export-btn{
+    border:none; background:rgba(255,255,255,.18); color:#fff;
+    border-radius:999px; padding:8px 16px; font-size:12.5px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .export-btn:hover{background:rgba(255,255,255,.3);}
+
+  .ind-group{margin-bottom:20px;}
+  .ind-group-title{display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; padding:4px 4px 10px;}
+  .ind-table{width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);}
+  .ind-table th{text-align:left; font-size:11.5px; color:var(--ink-soft); background:#FAF8F3; padding:8px 10px; border-bottom:1px solid var(--line); font-weight:700;}
+  .ind-table td{padding:9px 10px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:top;}
+  .ind-table tr:last-child td{border-bottom:none;}
+  .ind-code{font-family:ui-monospace,monospace; font-weight:700; font-size:12.5px; white-space:nowrap;}
+  .ind-tags{display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;}
+  .tag-core{background:#F5E4D7; color:#9C4A1F; font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px;}
+  .tag-new{background:#E3EEE9; color:#1E4A40; font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px;}
+  .tag-noscore{background:#EDEAE2; color:#6F6A5E; font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px;}
+  .ind-note{width:100%; min-height:34px; font-size:12px; padding:5px 7px;}
+  .ind-checkbox{width:17px; height:17px; cursor:pointer;}
+</style>
+</head>
+<body>
+<!-- ====================================================================
+  設定區塊：請依「Firebase設定教學.md」申請好 Firebase 專案後，
+  把下面 FIREBASE_CONFIG 換成您自己專案的金鑰，並自訂 ACCESS_CODE 通行碼。
+  完成後存檔、重新整理頁面即可開始使用。
+==================================================================== -->
+<script>
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyBKFuSkE6vFp-p3zZDbzk5dPmkuez5eIE4",
+    authDomain: "datong2.firebaseapp.com",
+    projectId: "datong2",
+    storageBucket: "datong2.firebasestorage.app",
+    messagingSenderId: "1002656844155",
+    appId: "1:1002656844155:web:e1968b2852484a62e955de"
+  };
+  const ACCESS_CODE = "77126822";
+</script>
+<!-- ==================================================================== -->
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<div id="app"><div class="empty">載入中…</div></div>
+<div id="toast"></div>
+
+<script>
+let db = null; /* Firestore 實例，連線成功後賦值 */
+
+/* ====================== 基礎設定 ====================== */
+const ROLES = ['主任','教保組長','教保員','總務','出納','社工'];
+const CATEGORIES = [
+  {id:'admin',   label:'行政組織及經營管理', color:'var(--cat-admin)',   soft:'var(--cat-admin-soft)'},
+  {id:'finance', label:'會計及財務管理',     color:'var(--cat-finance)', soft:'var(--cat-finance-soft)'},
+  {id:'env',     label:'環境設施及安全維護', color:'var(--cat-env)',     soft:'var(--cat-env-soft)'},
+  {id:'pro',     label:'專業服務',           color:'var(--cat-pro)',     soft:'var(--cat-pro-soft)'},
+  {id:'rights',  label:'權益保障',           color:'var(--cat-rights)',  soft:'var(--cat-rights-soft)'},
+  {id:'innov',   label:'改進或創新',         color:'var(--cat-innov)',   soft:'var(--cat-innov-soft)'},
+  {id:'other',   label:'其他行政庶務',       color:'var(--cat-other)',   soft:'var(--cat-other-soft)'}
+];
+const STATUSES = ['未開始','進行中','已完成','落後/待調整'];
+const REVIEW_STATUSES = ['待審核','已核可','請補充說明'];
+
+/* 109 次評鑑指標對照清單（用於「指標對照表」勾選與報表匯出） */
+const INDICATORS = [
+  {code:'1101', category:'admin', title:'董（理）監事會議會務執行及決策管理機制（依法免設董事會者不適評）'},
+  {code:'1102', category:'admin', title:'機構管理制度'},
+  {code:'1103', category:'admin', title:'機構配合情形'},
+  {code:'1104', category:'admin', title:'員工健康檢查情形'},
+  {code:'1105', category:'admin', title:'員工訓練情形'},
+  {code:'1106-1', category:'admin', title:'專業服務人力（社工人員）'},
+  {code:'1106-2', category:'admin', title:'專業服務人力（護理人員）'},
+  {code:'1106-3', category:'admin', title:'專業服務人力（教保員/訓練員）'},
+  {code:'1106-4', category:'admin', title:'專業服務人力（生活服務員）'},
+  {code:'1107', category:'admin', title:'法定通報責任', isNew:true},
+  {code:'2101', category:'finance', title:'會計制度'},
+  {code:'2102', category:'finance', title:'財務報告及管理作為'},
+  {code:'2103', category:'finance', title:'財物管理'},
+  {code:'2104', category:'finance', title:'捐贈財物之管理徵信情形'},
+  {code:'3101-A', category:'env', title:'浴廁比例、隱密性及方便性'},
+  {code:'3101-B', category:'env', title:'浴廁比例、隱密性及方便性（重度失能機構適評）'},
+  {code:'3102', category:'env', title:'無障礙浴廁'},
+  {code:'3103', category:'env', title:'緊急呼叫設備'},
+  {code:'3104', category:'env', title:'有無避難逃生路徑及等待救援空間'},
+  {code:'3105', category:'env', title:'建築物公共安全檢查簽證申報及消防安全設備設置、檢修申報及防火管理情形', isCore:true},
+  {code:'3106-1', category:'env', title:'訂定符合機構特性及需要之緊急災害（EOP）應變計畫及作業程序，並落實演練'},
+  {code:'3106-2', category:'env', title:'訂定符合機構服務對象之疏散策略及持續照顧作業程序，並落實照顧人力之緊急應變能力', isNew:true},
+  {code:'3107', category:'env', title:'寢室面積及自然採光通風'},
+  {code:'3108', category:'env', title:'機具使用安全及儀器設備操作維護'},
+  {code:'3109', category:'env', title:'重度失能機構之護理空間/護理站'},
+  {code:'3110', category:'env', title:'環境清潔衛生及廢棄物處理分類'},
+  {code:'3111', category:'env', title:'污物處理情形'},
+  {code:'3112', category:'env', title:'餐廳、廚房之環境設備與餐具符合衛生原則'},
+  {code:'3113', category:'env', title:'食物儲存空間及冷凍（藏）設備'},
+  {code:'3114', category:'env', title:'儲藏設施設置情形', isNew:true},
+  {code:'3115', category:'env', title:'室外通路', isNew:true, noScore:true},
+  {code:'3116', category:'env', title:'室內通路走廊及出入口', isNew:true, noScore:true},
+  {code:'3117', category:'env', title:'坡道', isNew:true, noScore:true},
+  {code:'3118', category:'env', title:'樓梯', isNew:true, noScore:true},
+  {code:'3119', category:'env', title:'昇降機', isNew:true, noScore:true},
+  {code:'4101', category:'pro', title:'個別化服務/支持計畫之擬訂'},
+  {code:'4102', category:'pro', title:'依據評估結果擬定服務目標'},
+  {code:'4103', category:'pro', title:'服務目標之執行'},
+  {code:'4201', category:'pro', title:'專業團隊服務模式'},
+  {code:'4202', category:'pro', title:'輔具及活動器材'},
+  {code:'4203', category:'pro', title:'特殊的支持措施'},
+  {code:'4204-A', category:'pro', title:'體能與休閒活動'},
+  {code:'4204-B', category:'pro', title:'提供重度失能服務對象日常活動情形（重度失能機構適評）'},
+  {code:'4205', category:'pro', title:'空間規劃與作息人力配置'},
+  {code:'4206', category:'pro', title:'提供服務對象的清潔服務（重度失能機構適評）'},
+  {code:'4207', category:'pro', title:'服務對象壓力性損傷預防及處理情形（重度失能機構適評）'},
+  {code:'4301', category:'pro', title:'定期健檢，並作健康管理'},
+  {code:'4302', category:'pro', title:'口腔照護支持服務'},
+  {code:'4303-A', category:'pro', title:'膳食服務'},
+  {code:'4303-B', category:'pro', title:'管灌服務對象餵食情形（重度失能機構適評）'},
+  {code:'4304', category:'pro', title:'用藥及托藥安全管理'},
+  {code:'4305', category:'pro', title:'意外傷害或緊急事件處理情形'},
+  {code:'4306', category:'pro', title:'傳染疾病之預防與處理'},
+  {code:'4401', category:'pro', title:'社區資源管理與運用'},
+  {code:'4402', category:'pro', title:'家庭訪視與需求評估'},
+  {code:'4403', category:'pro', title:'家庭支持服務'},
+  {code:'5101', category:'rights', title:'支持服務對象均有機會參與決定與其有關之活動及決策'},
+  {code:'5102', category:'rights', title:'服務對象隱私保護'},
+  {code:'5103', category:'rights', title:'支持服務對象自主（成人服務機構適用）'},
+  {code:'5104', category:'rights', title:'服務對象權益申訴處理組織與運作'},
+  {code:'5105', category:'rights', title:'服務對象意見反應及處理機制'},
+  {code:'5106', category:'rights', title:'家屬失聯或服務對象失依者之權益維護（無失聯服務對象者不適評）'},
+  {code:'6101', category:'innov', title:'機構服務績效評估'},
+  {code:'6201', category:'innov', title:'接受主管機關及其他目的事業主管機關查核及改進情形'},
+  {code:'6202', category:'innov', title:'針對評鑑應改進事項形成對策及執行成效'},
+  {code:'6301', category:'innov', title:'創新措施之執行成效'},
+  {code:'7101', category:'other', title:'三年內之違規及重大負面事件紀錄'},
+  {code:'7201-A', category:'other', title:'特定狀況加分－寢室空間規劃及使用（住宿型且非重度失能機構適評）'},
+  {code:'7201-B', category:'other', title:'特定狀況加分－寢室空間規劃及使用（重度失能機構適評）'},
+  {code:'7201-C', category:'other', title:'主動支持服務對象維護權益', isNew:true},
+  {code:'7301', category:'other', title:'污物處理空間', isNew:true}
+];
+
+function indicatorTags(ind){
+  let html = '';
+  if(ind.isCore) html += '<span class="tag-core">核心指標</span>';
+  if(ind.isNew) html += '<span class="tag-new">新增指標</span>';
+  if(ind.noScore) html += '<span class="tag-noscore">不計分</span>';
+  return html ? '<div class="ind-tags">'+html+'</div>' : '';
+}
+function matchIndicatorCode(text){
+  if(!text) return '';
+  const m = text.match(/(\d{4}(-[0-9A-Za-z]+)?)/);
+  return m ? m[1].toUpperCase() : '';
+}
+function tasksForIndicator(code){
+  return state.tasks.filter(function(t){ return matchIndicatorCode(t.indicator)===code.toUpperCase(); });
+}
+function indicatorStats(){
+  let ready=0, withTask=0, coreTotal=0, coreReady=0;
+  INDICATORS.forEach(function(ind){
+    const c = state.indicatorChecklist[ind.code] || {};
+    if(c.checked) ready++;
+    if(tasksForIndicator(ind.code).length>0) withTask++;
+    if(ind.isCore){ coreTotal++; if(c.checked) coreReady++; }
+  });
+  return {total:INDICATORS.length, ready:ready, withTask:withTask, coreTotal:coreTotal, coreReady:coreReady};
+}
+
+
+function catInfo(id){ return CATEGORIES.find(function(c){return c.id===id;}) || CATEGORIES[CATEGORIES.length-1]; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function isOverdue(t){
+  if(t.status==='已完成') return false;
+  if(!t.reminderDate) return false;
+  return t.reminderDate <= todayStr();
+}
+function statusColor(s){
+  if(s==='未開始') return {bg:'#EDEAE2', fg:'#6F6A5E'};
+  if(s==='進行中') return {bg:'#E3EEE9', fg:'#1E4A40'};
+  if(s==='已完成') return {bg:'#DCEEDD', fg:'#2C6B3A'};
+  return {bg:'#F5E4D7', fg:'#9C4A1F'};
+}
+function reviewColor(s){
+  if(s==='已核可') return {bg:'#DCEEDD', fg:'#2C6B3A'};
+  if(s==='請補充說明') return {bg:'#F5E4D7', fg:'#9C4A1F'};
+  return {bg:'#EDEAE2', fg:'#6F6A5E'};
+}
+
+/* ====================== 範例種子資料 ====================== */
+function seedTasks(){
+  function mk(o){
+    var t = {
+      id: genId(),
+      category:'other', title:'', indicator:'',
+      assignee:'', role:'教保員',
+      startDate: todayStr(), endDate:'',
+      progress:0, status:'未開始',
+      reminderDate:'',
+      reviewStatus:'待審核', directorComment:'',
+      createdBy:'系統範例', createdAt: todayStr(),
+      logs: []
+    };
+    Object.assign(t,o);
+    if(t.logs.length===0){
+      t.logs.push({date:t.startDate, author:t.createdBy, note:'建立工作項目。', progress:t.progress, status:t.status});
+    }
+    return t;
+  }
+  return [
+    mk({category:'admin', title:'更新工作手冊與緊急通報窗口資料', indicator:'指標 1102', assignee:'林組長', role:'教保組長', startDate:'2026-06-01', endDate:'2026-07-15', progress:60, status:'進行中', reminderDate:'2026-07-10', logs:[
+      {date:'2026-06-01', author:'林組長', note:'已完成組織架構與業務執掌章節。', progress:20, status:'進行中'},
+      {date:'2026-06-18', author:'林組長', note:'補充疑似性侵害事件處理原則段落，待主任覆核。', progress:60, status:'進行中'}
+    ]}),
+    mk({category:'finance', title:'114年度財產盤點與清冊更新', indicator:'指標 2103', assignee:'陳出納', role:'出納', startDate:'2026-06-10', endDate:'2026-08-31', progress:30, status:'進行中', reminderDate:'2026-08-20'}),
+    mk({category:'env', title:'消防安全設備半年期檢修申報', indicator:'指標 3105（核心指標）', assignee:'張總務', role:'總務', startDate:'2026-05-01', endDate:'2026-06-15', progress:100, status:'已完成', reviewStatus:'已核可', directorComment:'已收到合格證明，留存歸檔即可。', reminderDate:'2026-12-15'}),
+    mk({category:'pro', title:'服務對象個別化服務計畫（ISP）年度檢核', indicator:'指標 4101', assignee:'黃社工', role:'社工', startDate:'2026-06-01', endDate:'2026-07-31', progress:45, status:'進行中', reminderDate:'2026-07-25'}),
+    mk({category:'pro', title:'教保員在職訓練20小時規劃（含感染管制、口腔照護課程）', indicator:'指標 1105', assignee:'王教保員', role:'教保員', startDate:'2026-05-15', endDate:'2026-09-30', progress:80, status:'進行中'}),
+    mk({category:'rights', title:'權益申訴處理組織第2次會議籌備', indicator:'指標 5104', assignee:'黃社工', role:'社工', startDate:'2026-06-20', endDate:'2026-07-05', progress:20, status:'未開始', reminderDate:'2026-06-28'}),
+    mk({category:'innov', title:'易讀版服務手冊製作', indicator:'創新措施', assignee:'林組長', role:'教保組長', startDate:'2026-06-01', endDate:'2026-10-31', progress:10, status:'未開始'}),
+    mk({category:'admin', title:'114年度董事會工作計畫陳報', indicator:'指標 1101', assignee:'陳主任', role:'主任', startDate:'2026-06-15', endDate:'2026-07-01', progress:0, status:'未開始', reminderDate:'2026-06-25'})
+  ];
+}
+function defaultRoster(){
+  return [
+    {name:'陳主任', role:'主任'},
+    {name:'林組長', role:'教保組長'},
+    {name:'王教保員', role:'教保員'},
+    {name:'張總務', role:'總務'},
+    {name:'陳出納', role:'出納'},
+    {name:'黃社工', role:'社工'}
+  ];
+}
+
+/* ====================== 全域狀態 ====================== */
+const state = {
+  currentUser: null,
+  tasks: [],
+  roster: [],
+  indicatorChecklist: {},
+  indFilter: {category:'all', readiness:'all', core:false},
+  activeTab: 'overview',
+  filter: {category:'all', assignee:'all', status:'all'},
+  openTaskId: null,
+  modal: null,      // null | 'identity' | 'newTask'
+  identityPick: null,
+  saving: false
+};
+
+/* ====================== 儲存層（Firebase Firestore） ====================== */
+function isPlaceholderConfig(){
+  return !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('請貼上')===0;
+}
+
+async function ensureSeedData(){
+  try{
+    const snap = await db.collection('tasks').limit(1).get();
+    if(snap.empty){
+      const seed = seedTasks();
+      const batch = db.batch();
+      seed.forEach(function(t){ batch.set(db.collection('tasks').doc(t.id), t); });
+      await batch.commit();
+    }
+  }catch(e){ /* 種子資料建立失敗不影響後續使用，僅從空清單開始 */ }
+  try{
+    const rosterDoc = await db.collection('app').doc('roster').get();
+    if(!rosterDoc.exists){ await db.collection('app').doc('roster').set({list: defaultRoster()}); }
+  }catch(e){}
+  try{
+    const indDoc = await db.collection('app').doc('indicatorChecklist').get();
+    if(!indDoc.exists){ await db.collection('app').doc('indicatorChecklist').set({}); }
+  }catch(e){}
+}
+
+function attachListeners(){
+  db.collection('tasks').onSnapshot(function(snap){
+    state.tasks = snap.docs.map(function(d){ return d.data(); });
+    render();
+  }, function(err){ showToast('工作清單連線中斷：'+err.message, true); });
+
+  db.collection('app').doc('roster').onSnapshot(function(doc){
+    state.roster = (doc.exists && doc.data().list) ? doc.data().list : defaultRoster();
+    render();
+  }, function(err){ showToast('人員清單連線中斷', true); });
+
+  db.collection('app').doc('indicatorChecklist').onSnapshot(function(doc){
+    state.indicatorChecklist = doc.exists ? (doc.data()||{}) : {};
+    render();
+  }, function(err){ showToast('指標對照表連線中斷', true); });
+}
+
+function loadCurrentUserFromDevice(){
+  try{
+    const raw = localStorage.getItem('dt-current-user');
+    state.currentUser = raw ? JSON.parse(raw) : null;
+  }catch(e){ state.currentUser = null; }
+}
+function saveCurrentUserToDevice(){
+  try{
+    if(state.currentUser){ localStorage.setItem('dt-current-user', JSON.stringify(state.currentUser)); }
+    else{ localStorage.removeItem('dt-current-user'); }
+  }catch(e){ /* 裝置儲存空間異常時略過，僅影響「記住身分」功能 */ }
+}
+
+function showToast(msg, isWarn){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = isWarn ? 'var(--warn)' : 'var(--ink)';
+  el.classList.add('show');
+  setTimeout(function(){ el.classList.remove('show'); }, 2200);
+}
+
+function addToRoster(name, role){
+  if(!name) return;
+  const exists = state.roster.some(function(r){ return r.name===name; });
+  if(!exists){
+    const newList = state.roster.concat([{name:name, role:role||'教保員'}]);
+    db.collection('app').doc('roster').set({list:newList}).catch(function(){ showToast('人員清單更新失敗', true); });
+  }
+}
+
+/* ====================== 衍生計算 ====================== */
+function visibleTasks(scope){
+  let list = state.tasks.slice();
+  if(scope==='mine' && state.currentUser){
+    list = list.filter(function(t){ return t.assignee===state.currentUser.name; });
+  }
+  if(state.filter.category!=='all'){ list = list.filter(function(t){ return t.category===state.filter.category; }); }
+  if(state.filter.assignee!=='all'){ list = list.filter(function(t){ return t.assignee===state.filter.assignee; }); }
+  if(state.filter.status!=='all'){ list = list.filter(function(t){ return t.status===state.filter.status; }); }
+  list.sort(function(a,b){
+    const ao = isOverdue(a) ? 0 : 1;
+    const bo = isOverdue(b) ? 0 : 1;
+    if(ao!==bo) return ao-bo;
+    return (a.endDate||'9999').localeCompare(b.endDate||'9999');
+  });
+  return list;
+}
+function computeStats(){
+  const total = state.tasks.length;
+  const done = state.tasks.filter(function(t){ return t.status==='已完成'; }).length;
+  const inProgress = state.tasks.filter(function(t){ return t.status==='進行中'; }).length;
+  const overdue = state.tasks.filter(isOverdue).length;
+  return {total:total, done:done, inProgress:inProgress, overdue:overdue};
+}
+function categoryStats(){
+  return CATEGORIES.map(function(c){
+    const items = state.tasks.filter(function(t){ return t.category===c.id; });
+    if(items.length===0) return {cat:c, count:0, avg:0};
+    const avg = Math.round(items.reduce(function(s,t){ return s+(t.progress||0); },0)/items.length);
+    return {cat:c, count:items.length, avg:avg};
+  }).filter(function(x){ return x.count>0; });
+}
+function recentActivity(n){
+  const items = [];
+  state.tasks.forEach(function(t){
+    t.logs.forEach(function(l){
+      items.push({date:l.date, author:l.author, note:l.note, title:t.title, taskId:t.id});
+    });
+  });
+  items.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  return items.slice(0, n||8);
+}
+
+/* ====================== 任務操作（寫入 Firestore，畫面由即時監聽自動更新） ====================== */
+function findTask(id){ return state.tasks.find(function(t){ return t.id===id; }); }
+
+function createTask(data){
+  const ref = db.collection('tasks').doc();
+  const t = {
+    id: ref.id,
+    category: data.category, title: data.title, indicator: data.indicator||'',
+    assignee: data.assignee, role: data.role,
+    startDate: data.startDate||todayStr(), endDate: data.endDate||'',
+    progress: Number(data.progress)||0, status: data.status||'未開始',
+    reminderDate: data.reminderDate||'',
+    reviewStatus:'待審核', directorComment:'',
+    createdBy: state.currentUser ? state.currentUser.name : '未知',
+    createdAt: todayStr(),
+    logs: [{date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note: data.note || '建立工作項目。', progress:Number(data.progress)||0, status:data.status||'未開始'}]
+  };
+  addToRoster(data.assignee, data.role);
+  ref.set(t).then(function(){ showToast('已新增工作項目'); }).catch(function(err){ showToast('新增失敗：'+err.message, true); });
+}
+function addLog(taskId, note, progress, status){
+  const t = findTask(taskId); if(!t) return;
+  const logEntry = {date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note:note, progress:Number(progress), status:status};
+  const newReviewStatus = (status==='已完成' && t.reviewStatus!=='已核可') ? '待審核' : t.reviewStatus;
+  db.collection('tasks').doc(taskId).update({
+    progress: Number(progress),
+    status: status,
+    reviewStatus: newReviewStatus,
+    logs: firebase.firestore.FieldValue.arrayUnion(logEntry)
+  }).then(function(){ showToast('已更新執行進度'); }).catch(function(err){ showToast('更新失敗：'+err.message, true); });
+}
+function setReview(taskId, reviewStatus, comment){
+  const t = findTask(taskId); if(!t) return;
+  const logEntry = {date:todayStr(), author:(state.currentUser?state.currentUser.name:'主任')+'（主任批示）', note:(reviewStatus + (comment? '：'+comment : '')), progress:t.progress, status:t.status};
+  db.collection('tasks').doc(taskId).update({
+    reviewStatus: reviewStatus,
+    directorComment: comment,
+    logs: firebase.firestore.FieldValue.arrayUnion(logEntry)
+  }).then(function(){ showToast('已儲存主任批示'); }).catch(function(err){ showToast('儲存失敗：'+err.message, true); });
+}
+function setReminder(taskId, dateStr){
+  db.collection('tasks').doc(taskId).update({reminderDate: dateStr})
+    .then(function(){ showToast('已更新提醒日期'); })
+    .catch(function(err){ showToast('更新失敗：'+err.message, true); });
+}
+function deleteTask(taskId){
+  db.collection('tasks').doc(taskId).delete()
+    .then(function(){ showToast('已刪除工作項目'); })
+    .catch(function(err){ showToast('刪除失敗：'+err.message, true); });
+}
+
+/* ====================== 渲染 ====================== */
+function render(){
+  const app = document.getElementById('app');
+  if(!state.currentUser){
+    app.innerHTML = renderIdentityScreen();
+    bindIdentityScreen();
+    return;
+  }
+  app.innerHTML = renderHeader() + renderTabsAndBody();
+  bindGlobalEvents();
+  if(state.modal==='newTask'){
+    showNewTaskModal();
+  }
+}
+
+function renderIdentityScreen(){
+  return ''
+  + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
+  + '  <div class="modal" style="max-width:480px;">'
+  + '    <div class="modal-head">'
+  + '      <h2>歡迎使用大同發展中心工作管理平台</h2>'
+  + '      <p>請先選擇您的身分，以便系統記錄工作項目的執行與批改紀錄。</p>'
+  + '    </div>'
+  + '    <div class="modal-body">'
+  + '      <div class="field-block">'
+  + '        <label class="field-label">您的姓名</label>'
+  + '        <input class="full" type="text" id="id-name" placeholder="例如：林組長" list="roster-names">'
+  + '        <datalist id="roster-names">' + state.roster.map(function(r){ return '<option value="'+escapeHtml(r.name)+'">'; }).join('') + '</datalist>'
+  + '      </div>'
+  + '      <div class="field-block">'
+  + '        <label class="field-label">您的角色</label>'
+  + '        <div class="id-options" id="id-roles">'
+  +            ROLES.map(function(r){ return '<div class="id-opt" data-role="'+r+'">'+r+'</div>'; }).join('')
+  + '        </div>'
+  + '      </div>'
+  + '      <div class="small-note">資料將儲存在機構共用的工作清單中，所有同仁登入後皆可查看「全部工作」，請以真實姓名登入以便主任進行批改與提醒。</div>'
+  + '    </div>'
+  + '    <div class="modal-foot">'
+  + '      <button class="btn btn-primary" id="id-submit">進入系統</button>'
+  + '    </div>'
+  + '  </div>'
+  + '</div>';
+}
+function bindIdentityScreen(){
+  const roleBoxes = document.querySelectorAll('#id-roles .id-opt');
+  roleBoxes.forEach(function(el){
+    el.addEventListener('click', function(){
+      roleBoxes.forEach(function(b){ b.classList.remove('sel'); });
+      el.classList.add('sel');
+      state.identityPick = el.getAttribute('data-role');
+    });
+  });
+  document.getElementById('id-submit').addEventListener('click', function(){
+    const name = document.getElementById('id-name').value.trim();
+    if(!name){ showToast('請輸入姓名', true); return; }
+    if(!state.identityPick){ showToast('請選擇角色', true); return; }
+    state.currentUser = {name:name, role:state.identityPick};
+    addToRoster(name, state.identityPick);
+    saveCurrentUserToDevice();
+    state.identityPick = null;
+    render();
+  });
+}
+
+function renderHeader(){
+  const u = state.currentUser;
+  return ''
+  + '<div class="app-header">'
+  + '  <div class="brand">'
+  + '    <div class="brand-mark">同</div>'
+  + '    <div class="brand-text"><h1>大同發展中心 · 工作管理平台</h1><p>身心障礙福利機構評鑑對應任務追蹤</p></div>'
+  + '  </div>'
+  + '  <div class="header-actions">'
+  + '    <button class="export-btn" id="export-report-btn">📤 匯出報表</button>'
+  + '    <div class="user-chip">'
+  + '      <span>👤 <b>'+escapeHtml(u.name)+'</b></span>'
+  + '      <span class="role-tag">'+escapeHtml(u.role)+'</span>'
+  + '      <button data-action="switch-user">切換使用者</button>'
+  + '    </div>'
+  + '  </div>'
+  + '</div>';
+}
+
+function renderTabsAndBody(){
+  const isDirector = state.currentUser.role==='主任';
+  const reviewCount = state.tasks.filter(function(t){
+    return t.reviewStatus==='待審核' || isOverdue(t);
+  }).length;
+
+  let tabsHtml = '<div class="tabs">'
+    + tabBtn('overview','總覽')
+    + tabBtn('mine','我的工作')
+    + tabBtn('all','全部工作')
+    + tabBtn('indicators','指標對照表');
+  if(isDirector){
+    tabsHtml += tabBtn('review','審核與提醒', reviewCount);
+  }
+  tabsHtml += '</div>';
+
+  let body = '';
+  if(state.activeTab==='overview') body = renderOverview();
+  else if(state.activeTab==='mine') body = renderTaskListPanel('mine');
+  else if(state.activeTab==='all') body = renderTaskListPanel('all');
+  else if(state.activeTab==='indicators') body = renderIndicatorPanel();
+  else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
+
+  return '<div class="container">' + tabsHtml + body + '</div>';
+}
+function tabBtn(id,label,count){
+  const cls = 'tab' + (state.activeTab===id?' active':'');
+  const pill = count ? '<span class="pill">'+count+'</span>' : '';
+  return '<div class="'+cls+'" data-action="tab" data-tab="'+id+'">'+label+pill+'</div>';
+}
+
+function renderOverview(){
+  const s = computeStats();
+  const cats = categoryStats();
+  const ind = indicatorStats();
+  const isDirector = state.currentUser.role==='主任';
+  let html = '<div class="stat-grid">'
+    + statCard(s.total,'工作項目總數','')
+    + statCard(s.inProgress,'進行中','good')
+    + statCard(s.done,'已完成','good')
+    + statCard(s.overdue,'已逾期 / 待留意','warn')
+    + '</div>';
+
+  html += '<div class="panel" style="margin-bottom:18px;">'
+    + '  <div class="panel-pad" style="padding-bottom:4px;"><div class="section-title">各評鑑面向執行進度</div><div class="section-sub">依「'+CATEGORIES.length+'大項評鑑面向」彙整目前所有工作項目的平均進度</div></div>'
+    + '  <div class="cat-bars">'
+    +     (cats.length? cats.map(function(c){
+              return '<div class="cat-row">'
+                + '<div class="cat-label"><span class="dot" style="background:'+c.cat.color+'"></span>'+c.cat.label+'（'+c.count+'項）</div>'
+                + '<div class="track"><div class="fill" style="width:'+c.avg+'%; background:'+c.cat.color+'"></div></div>'
+                + '<div class="pct">'+c.avg+'%</div>'
+                + '</div>';
+            }).join('') : '<div class="small-note">尚無工作項目資料。</div>')
+    + '  </div>'
+    + '</div>';
+
+  html += '<div class="panel" style="margin-bottom:18px;">'
+    + '  <div class="panel-pad" style="padding-bottom:4px;"><div class="section-title">指標準備度</div><div class="section-sub">對照「109評鑑指標」共'+INDICATORS.length+'項，詳細勾選請至「指標對照表」分頁</div></div>'
+    + '  <div class="stat-grid" style="padding:0 20px 18px; margin-bottom:0;">'
+    +     statCard(ind.ready+'/'+ind.total,'資料已備妥','good')
+    +     statCard(ind.withTask+'/'+ind.total,'已建立對應工作','good')
+    +     statCard(ind.coreReady+'/'+ind.coreTotal,'核心指標達成','warn')
+    +     statCard(s.total,'目前追蹤工作總數','')
+    + '  </div>'
+    + '</div>';
+
+  html += '<div class="panel">'
+    + '  <div class="panel-pad" style="padding-bottom:4px;"><div class="section-title">最新執行動態</div><div class="section-sub">同仁登打的最新工作說明與進度更新</div></div>'
+    + '  <div class="activity-feed">'
+    +     (recentActivity(8).map(function(a){
+              return '<div class="activity-item"><div class="a-time">'+(a.date||'')+'</div><div><b>'+escapeHtml(a.author||'')+'</b> · '+escapeHtml(a.title||'')+'<br>'+escapeHtml(a.note||'')+'</div></div>';
+            }).join('') || '<div class="small-note">尚無紀錄。</div>')
+    + '  </div>'
+    + '</div>';
+  return html;
+}
+function statCard(num,label,cls){
+  return '<div class="stat-card '+(cls||'')+'"><div class="num">'+num+'</div><div class="lbl">'+label+'</div></div>';
+}
+
+function renderFilterBar(){
+  const assignees = state.roster.map(function(r){ return r.name; });
+  return '<div class="filter-bar">'
+    + '<select data-action="filter-category">'
+    +   '<option value="all">全部評鑑面向</option>'
+    +   CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(state.filter.category===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')
+    + '</select>'
+    + '<select data-action="filter-assignee">'
+    +   '<option value="all">全部負責人</option>'
+    +   assignees.map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(state.filter.assignee===a?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')
+    + '</select>'
+    + '<select data-action="filter-status">'
+    +   '<option value="all">全部狀態</option>'
+    +   STATUSES.map(function(s){ return '<option value="'+s+'"'+(state.filter.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
+    + '</select>'
+    + '<div class="spacer"></div>'
+    + '<button class="btn btn-primary" data-action="new-task-open">＋ 新增工作項目</button>'
+    + '</div>';
+}
+
+function renderTaskListPanel(scope){
+  const tasks = visibleTasks(scope);
+  let html = renderFilterBar();
+  if(tasks.length===0){
+    html += '<div class="panel"><div class="empty"><div class="big">📋</div>'+(scope==='mine'?'您目前沒有指派的工作項目，按上方「新增工作項目」開始登打。':'找不到符合篩選條件的工作項目。')+'</div></div>';
+    return html;
+  }
+  html += '<div class="task-list">' + tasks.map(renderTaskCard).join('') + '</div>';
+  return html;
+}
+
+function renderTaskCard(t){
+  const cat = catInfo(t.category);
+  const open = state.openTaskId===t.id;
+  const sc = statusColor(t.status);
+  const circumference = 113.1;
+  const offset = circumference * (1 - (t.progress||0)/100);
+  const overdue = isOverdue(t);
+  const isDirector = state.currentUser.role==='主任';
+  const canEdit = isDirector || t.assignee===state.currentUser.name;
+
+  let head = '<div class="task-head" data-action="toggle-task" data-id="'+t.id+'">'
+    + '<div class="cat-stripe" style="background:'+cat.color+'"></div>'
+    + '<div class="ring-wrap">'
+    +   '<svg width="44" height="44" viewBox="0 0 44 44">'
+    +     '<circle cx="22" cy="22" r="18" fill="none" stroke="#EFEAE0" stroke-width="4"></circle>'
+    +     '<circle cx="22" cy="22" r="18" fill="none" stroke="'+cat.color+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+circumference+'" stroke-dashoffset="'+offset+'" transform="rotate(-90 22 22)"></circle>'
+    +   '</svg>'
+    +   '<div class="ring-pct">'+(t.progress||0)+'%</div>'
+    + '</div>'
+    + '<div class="task-main">'
+    +   '<div class="task-title-row">'
+    +     '<span class="task-title">'+escapeHtml(t.title)+'</span>'
+    +     (t.indicator? '<span class="cat-badge" style="background:'+cat.soft+'; color:'+cat.color+'">'+escapeHtml(t.indicator)+'</span>' : '')
+    +   '</div>'
+    +   '<div class="task-meta">'
+    +     '<span>👤 '+escapeHtml(t.assignee)+'（'+escapeHtml(t.role)+'）</span>'
+    +     '<span>🗓 '+ (t.startDate||'—') +' ～ '+ (t.endDate||'未定') +'</span>'
+    +     (t.reminderDate? '<span>⏰ 提醒：'+t.reminderDate+'</span>' : '')
+    +   '</div>'
+    + '</div>'
+    + (overdue? '<span class="overdue-flag">逾期待辦</span>' : '')
+    + '<span class="review-flag" style="background:'+reviewColor(t.reviewStatus).bg+'; color:'+reviewColor(t.reviewStatus).fg+'">'+t.reviewStatus+'</span>'
+    + '<span class="status-badge" style="background:'+sc.bg+'; color:'+sc.fg+'">'+t.status+'</span>'
+    + '<span class="chev">▶</span>'
+    + '</div>';
+
+  let body = '<div class="task-body"><div class="body-grid">';
+
+  // 左：執行紀錄
+  body += '<div>'
+    + '<label class="field-label">執行情形紀錄</label>'
+    + '<div class="log-list">'
+    +   t.logs.slice().reverse().map(function(l){
+          return '<div class="log-entry"><div class="lhead"><span>'+escapeHtml(l.author)+'</span><span>'+l.date+' · 進度 '+l.progress+'% · '+l.status+'</span></div><div class="lnote">'+escapeHtml(l.note)+'</div></div>';
+        }).join('')
+    + '</div>';
+  if(canEdit){
+    body += '<form data-action="add-log" data-id="'+t.id+'">'
+      + '<div class="field-block"><label class="field-label">登打本次執行說明</label><textarea name="note" placeholder="說明本次進度、遇到的問題或已完成事項…" required></textarea></div>'
+      + '<div class="row-2">'
+      +   '<div class="field-block"><label class="field-label">最新進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+(t.progress||0)+'"></div>'
+      +   '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(t.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
+      + '</div>'
+      + '<button class="btn btn-primary btn-sm" type="submit">送出更新</button>'
+      + '</form>';
+  } else {
+    body += '<div class="small-note">僅負責人或主任可登打此項目的執行進度。</div>';
+  }
+  body += '</div>';
+
+  // 右：主任批改 / 提醒設定
+  body += '<div>';
+  if(isDirector){
+    body += '<div class="director-box">'
+      + '<label class="field-label">主任批改</label>'
+      + '<form data-action="review-task" data-id="'+t.id+'">'
+      +   '<div class="field-block"><select class="full" name="reviewStatus">'+REVIEW_STATUSES.map(function(s){ return '<option value="'+s+'"'+(t.reviewStatus===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
+      +   '<div class="field-block"><textarea name="comment" placeholder="給同仁的備註或修改建議…">'+escapeHtml(t.directorComment||'')+'</textarea></div>'
+      +   '<button class="btn btn-primary btn-sm" type="submit">儲存批示</button>'
+      + '</form>'
+      + (t.directorComment? '<div class="small-note">最近備註：'+escapeHtml(t.directorComment)+'</div>' : '')
+      + '</div>'
+      + '<form data-action="set-reminder" data-id="'+t.id+'" style="margin-top:12px;">'
+      +   '<label class="field-label">設定提醒日期</label>'
+      +   '<div class="row-2">'
+      +     '<input class="full" type="date" name="reminderDate" value="'+(t.reminderDate||'')+'">'
+      +     '<button class="btn btn-sm" type="submit">更新提醒</button>'
+      +   '</div>'
+      + '</form>'
+      + '<button class="btn btn-ghost btn-sm" style="margin-top:14px;" data-action="delete-task" data-id="'+t.id+'">刪除此工作項目</button>';
+  } else {
+    body += '<div class="director-box"><label class="field-label">主任備註</label><div style="font-size:13px;">'+(t.directorComment? escapeHtml(t.directorComment) : '<span class="small-note">尚無主任備註。</span>')+'</div></div>'
+      + (t.reminderDate? '<div class="small-note" style="margin-top:10px;">主任設定的提醒日期：'+t.reminderDate+'</div>' : '');
+  }
+  body += '</div></div></div>';
+
+  return '<div class="task-card'+(open?' open':'')+'" data-task-id="'+t.id+'">' + head + body + '</div>';
+}
+
+function renderReviewPanel(){
+  const pending = state.tasks.filter(function(t){ return t.reviewStatus==='待審核' || isOverdue(t); });
+  let html = '<div class="panel" style="margin-bottom:14px;"><div class="panel-pad"><div class="section-title">需要您留意的項目</div><div class="section-sub">包含尚待審核的執行回報，以及已到達提醒日期但尚未完成的工作</div></div></div>';
+  if(pending.length===0){
+    html += '<div class="panel"><div class="empty"><div class="big">✅</div>目前沒有待審核或逾期的工作項目。</div></div>';
+    return html;
+  }
+  html += '<div class="task-list">' + pending.map(renderTaskCard).join('') + '</div>';
+  return html;
+}
+
+/* ====================== 指標對照表 ====================== */
+function linkedCellHtml(code){
+  const linked = tasksForIndicator(code);
+  if(linked.length===0) return '<span class="small-note">尚無對應工作項目</span>';
+  const names = linked.slice(0,2).map(function(t){ return escapeHtml(t.title); }).join('、');
+  const more = linked.length>2 ? '　等共'+linked.length+'項' : '';
+  return '<div>'+names+more+'</div>';
+}
+function renderIndicatorPanel(){
+  const stats = indicatorStats();
+  let html = '<div class="stat-grid">'
+    + statCard(stats.total,'指標總數','')
+    + statCard(stats.ready+'/'+stats.total,'資料已備妥','good')
+    + statCard(stats.withTask+'/'+stats.total,'已建立對應工作項目','good')
+    + statCard(stats.coreReady+'/'+stats.coreTotal,'核心指標達成','warn')
+    + '</div>';
+
+  html += '<div class="filter-bar">'
+    + '<select data-action="ind-filter-category">'
+    +   '<option value="all">全部評鑑面向</option>'
+    +   CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(state.indFilter.category===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')
+    + '</select>'
+    + '<select data-action="ind-filter-readiness">'
+    +   '<option value="all">全部狀態</option>'
+    +   '<option value="ready"'+(state.indFilter.readiness==='ready'?' selected':'')+'>已備妥</option>'
+    +   '<option value="notReady"'+(state.indFilter.readiness==='notReady'?' selected':'')+'>尚未備妥</option>'
+    +   '<option value="hasTask"'+(state.indFilter.readiness==='hasTask'?' selected':'')+'>已有對應工作項目</option>'
+    +   '<option value="noTask"'+(state.indFilter.readiness==='noTask'?' selected':'')+'>尚無對應工作項目</option>'
+    + '</select>'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);"><input type="checkbox" id="ind-core-only" '+(state.indFilter.core?'checked':'')+'> 只看核心指標</label>'
+    + '<div class="spacer"></div>'
+    + '<div class="small-note" style="max-width:260px;text-align:right;">勾選「已備妥」標記佐證資料已準備完成；點「＋建立工作」可直接為該指標建立追蹤項目</div>'
+    + '</div>';
+
+  let anyGroup = false;
+  CATEGORIES.forEach(function(cat){
+    if(state.indFilter.category!=='all' && cat.id!==state.indFilter.category) return;
+    let items = INDICATORS.filter(function(ind){ return ind.category===cat.id; });
+    if(state.indFilter.core) items = items.filter(function(ind){ return ind.isCore; });
+    items = items.filter(function(ind){
+      const c = state.indicatorChecklist[ind.code] || {};
+      const hasTask = tasksForIndicator(ind.code).length>0;
+      if(state.indFilter.readiness==='ready') return !!c.checked;
+      if(state.indFilter.readiness==='notReady') return !c.checked;
+      if(state.indFilter.readiness==='hasTask') return hasTask;
+      if(state.indFilter.readiness==='noTask') return !hasTask;
+      return true;
+    });
+    if(items.length===0) return;
+    anyGroup = true;
+    html += '<div class="ind-group">'
+      + '<div class="ind-group-title"><span class="dot" style="background:'+cat.color+'"></span>'+cat.label+'（'+items.length+' 項）</div>'
+      + '<table class="ind-table"><thead><tr>'
+      +   '<th style="width:64px;">已備妥</th><th style="width:90px;">指標編號</th><th>指標名稱</th><th style="width:200px;">對應工作項目</th><th style="width:220px;">備註</th><th style="width:96px;">操作</th>'
+      + '</tr></thead><tbody>'
+      +   items.map(function(ind){
+            const c = state.indicatorChecklist[ind.code] || {};
+            return '<tr>'
+              + '<td><input type="checkbox" class="ind-checkbox" data-action="ind-check" data-code="'+ind.code+'" '+(c.checked?'checked':'')+'></td>'
+              + '<td class="ind-code">'+ind.code+'</td>'
+              + '<td>'+escapeHtml(ind.title)+indicatorTags(ind)+'</td>'
+              + '<td>'+linkedCellHtml(ind.code)+'</td>'
+              + '<td><textarea class="ind-note" data-action="ind-note" data-code="'+ind.code+'" placeholder="備註／佐證資料存放位置…">'+escapeHtml(c.note||'')+'</textarea></td>'
+              + '<td><button class="btn btn-sm" data-action="ind-new-task" data-code="'+ind.code+'">＋建立工作</button></td>'
+              + '</tr>';
+          }).join('')
+      + '</tbody></table>'
+      + '</div>';
+  });
+  if(!anyGroup){
+    html += '<div class="panel"><div class="empty"><div class="big">🔍</div>找不到符合篩選條件的指標。</div></div>';
+  }
+  return html;
+}
+
+
+function showNewTaskModal(presets){
+  presets = presets || {};
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'new-task-overlay';
+  const assignees = state.roster.map(function(r){ return r.name; });
+  overlay.innerHTML = ''
+    + '<div class="modal">'
+    + '  <div class="modal-head"><h2>新增工作項目</h2><p>登打工作項目、負責人、執行期間與初始進度</p></div>'
+    + '  <div class="modal-body">'
+    + '    <form id="new-task-form">'
+    + '      <div class="field-block"><label class="field-label">工作項目名稱</label><input class="full" type="text" name="title" value="'+escapeHtml(presets.title||'')+'" placeholder="例如：更新工作手冊與緊急通報窗口資料" required></div>'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">對應評鑑面向</label><select class="full" name="category">'+CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(presets.category===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')+'</select></div>'
+    + '        <div class="field-block"><label class="field-label">對應指標編號（選填）</label><input class="full" type="text" name="indicator" value="'+escapeHtml(presets.indicator||'')+'" placeholder="例如：1102 機構管理制度" list="indicator-suggestions"></div>'
+    + '      </div>'
+    + '      <datalist id="indicator-suggestions">'+INDICATORS.map(function(i){ return '<option value="'+i.code+' '+escapeHtml(i.title)+'">'; }).join('')+'</datalist>'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">負責人姓名</label><input class="full" type="text" name="assignee" list="roster-names-modal" value="'+escapeHtml(state.currentUser.name)+'" required></div>'
+    + '        <div class="field-block"><label class="field-label">負責人角色</label><select class="full" name="role">'+ROLES.map(function(r){ return '<option value="'+r+'"'+(r===state.currentUser.role?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></div>'
+    + '      </div>'
+    + '      <datalist id="roster-names-modal">'+assignees.map(function(a){ return '<option value="'+escapeHtml(a)+'">'; }).join('')+'</datalist>'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">開始日期</label><input class="full" type="date" name="startDate" value="'+todayStr()+'"></div>'
+    + '        <div class="field-block"><label class="field-label">預計完成日期</label><input class="full" type="date" name="endDate"></div>'
+    + '      </div>'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">初始進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="0"></div>'
+    + '        <div class="field-block"><label class="field-label">初始狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('')+'</select></div>'
+    + '      </div>'
+    + '      <div class="field-block"><label class="field-label">提醒日期（選填）</label><input class="full" type="date" name="reminderDate"></div>'
+    + '      <div class="field-block"><label class="field-label">說明（選填）</label><textarea name="note" placeholder="補充工作內容、依據或備註…"></textarea></div>'
+    + '    </form>'
+    + '  </div>'
+    + '  <div class="modal-foot"><button class="btn" id="new-task-cancel">取消</button><button class="btn btn-primary" id="new-task-submit">新增</button></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', function(e){ if(e.target===overlay){ closeNewTaskModal(); } });
+  document.getElementById('new-task-cancel').addEventListener('click', closeNewTaskModal);
+  document.getElementById('new-task-submit').addEventListener('click', function(){
+    const form = document.getElementById('new-task-form');
+    if(!form.checkValidity()){ form.reportValidity(); return; }
+    const fd = new FormData(form);
+    createTask({
+      title: fd.get('title'), category: fd.get('category'), indicator: fd.get('indicator'),
+      assignee: fd.get('assignee'), role: fd.get('role'),
+      startDate: fd.get('startDate'), endDate: fd.get('endDate'),
+      progress: fd.get('progress'), status: fd.get('status'),
+      reminderDate: fd.get('reminderDate'), note: fd.get('note')
+    });
+    closeNewTaskModal();
+    showToast('已新增工作項目');
+    render();
+  });
+}
+function closeNewTaskModal(){
+  const overlay = document.getElementById('new-task-overlay');
+  if(overlay) overlay.remove();
+  state.modal = null;
+}
+
+/* ====================== 匯出報表 ====================== */
+function exportReport(){
+  if(typeof XLSX==='undefined'){
+    showToast('匯出元件尚在載入，請稍候幾秒再試一次', true);
+    return;
+  }
+  try{
+    const wb = XLSX.utils.book_new();
+
+    const taskRows = state.tasks.map(function(t){
+      const lastLog = t.logs[t.logs.length-1] || {};
+      return {
+        '評鑑面向': catInfo(t.category).label,
+        '對應指標': t.indicator||'',
+        '工作項目': t.title,
+        '負責人': t.assignee,
+        '角色': t.role,
+        '開始日期': t.startDate||'',
+        '預計完成日期': t.endDate||'',
+        '進度(%)': t.progress,
+        '狀態': t.status,
+        '主任批示': t.reviewStatus,
+        '主任備註': t.directorComment||'',
+        '提醒日期': t.reminderDate||'',
+        '最新執行說明': lastLog.note||'',
+        '最新更新日期': lastLog.date||'',
+        '建立人': t.createdBy,
+        '建立日期': t.createdAt
+      };
+    });
+    const ws1 = XLSX.utils.json_to_sheet(taskRows.length?taskRows:[{'提示':'目前尚無工作項目'}]);
+    XLSX.utils.book_append_sheet(wb, ws1, '工作項目清單');
+
+    const indRows = INDICATORS.map(function(ind){
+      const c = state.indicatorChecklist[ind.code] || {};
+      const linked = tasksForIndicator(ind.code);
+      return {
+        '指標編號': ind.code,
+        '評鑑面向': catInfo(ind.category).label,
+        '指標名稱': ind.title,
+        '標籤': [ind.isCore?'核心指標':'', ind.isNew?'新增指標':'', ind.noScore?'不計分':''].filter(Boolean).join('、'),
+        '資料已備妥': c.checked?'是':'否',
+        '對應工作項目數': linked.length,
+        '對應工作項目': linked.map(function(t){ return t.title; }).join('；'),
+        '備註': c.note||''
+      };
+    });
+    const ws2 = XLSX.utils.json_to_sheet(indRows);
+    XLSX.utils.book_append_sheet(wb, ws2, '指標對照表');
+
+    const catRows = categoryStats().map(function(c){
+      return {'評鑑面向':c.cat.label, '工作項目數':c.count, '平均進度(%)':c.avg};
+    });
+    const ws3 = XLSX.utils.json_to_sheet(catRows.length?catRows:[{'評鑑面向':'尚無資料','工作項目數':0,'平均進度(%)':0}]);
+    XLSX.utils.book_append_sheet(wb, ws3, '各面向進度彙總');
+
+    XLSX.writeFile(wb, '大同發展中心工作管理報表_'+todayStr()+'.xlsx');
+    showToast('已匯出報表');
+  }catch(e){
+    showToast('匯出失敗，請再試一次', true);
+  }
+}
+
+/* ====================== 事件綁定 ====================== */
+function bindGlobalEvents(){
+  document.querySelectorAll('[data-action="tab"]').forEach(function(el){
+    el.addEventListener('click', function(){ state.activeTab = el.getAttribute('data-tab'); state.openTaskId=null; render(); });
+  });
+  const switchBtn = document.querySelector('[data-action="switch-user"]');
+  if(switchBtn) switchBtn.addEventListener('click', function(){ state.currentUser=null; saveCurrentUserToDevice(); render(); });
+
+  const catSel = document.querySelector('[data-action="filter-category"]');
+  if(catSel) catSel.addEventListener('change', function(){ state.filter.category = catSel.value; render(); });
+  const assSel = document.querySelector('[data-action="filter-assignee"]');
+  if(assSel) assSel.addEventListener('change', function(){ state.filter.assignee = assSel.value; render(); });
+  const stSel = document.querySelector('[data-action="filter-status"]');
+  if(stSel) stSel.addEventListener('change', function(){ state.filter.status = stSel.value; render(); });
+
+  const newBtn = document.querySelector('[data-action="new-task-open"]');
+  if(newBtn) newBtn.addEventListener('click', function(){ state.modal='newTask'; showNewTaskModal(); });
+
+  const exportBtn = document.getElementById('export-report-btn');
+  if(exportBtn) exportBtn.addEventListener('click', exportReport);
+
+  const indCatSel = document.querySelector('[data-action="ind-filter-category"]');
+  if(indCatSel) indCatSel.addEventListener('change', function(){ state.indFilter.category = indCatSel.value; render(); });
+  const indReadySel = document.querySelector('[data-action="ind-filter-readiness"]');
+  if(indReadySel) indReadySel.addEventListener('change', function(){ state.indFilter.readiness = indReadySel.value; render(); });
+  const indCoreChk = document.getElementById('ind-core-only');
+  if(indCoreChk) indCoreChk.addEventListener('change', function(){ state.indFilter.core = indCoreChk.checked; render(); });
+
+  document.querySelectorAll('[data-action="ind-check"]').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      const code = cb.getAttribute('data-code');
+      const existing = state.indicatorChecklist[code] || {};
+      const updated = Object.assign({}, existing, {checked: cb.checked});
+      const fieldUpdate = {}; fieldUpdate[code] = updated;
+      db.collection('app').doc('indicatorChecklist').set(fieldUpdate, {merge:true})
+        .catch(function(err){ showToast('儲存失敗：'+err.message, true); });
+    });
+  });
+  document.querySelectorAll('[data-action="ind-note"]').forEach(function(ta){
+    ta.addEventListener('blur', function(){
+      const code = ta.getAttribute('data-code');
+      const existing = state.indicatorChecklist[code] || {};
+      const updated = Object.assign({}, existing, {note: ta.value});
+      const fieldUpdate = {}; fieldUpdate[code] = updated;
+      db.collection('app').doc('indicatorChecklist').set(fieldUpdate, {merge:true})
+        .catch(function(err){ showToast('備註儲存失敗：'+err.message, true); });
+    });
+  });
+  document.querySelectorAll('[data-action="ind-new-task"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const code = btn.getAttribute('data-code');
+      const ind = INDICATORS.find(function(i){ return i.code===code; });
+      if(!ind) return;
+      showNewTaskModal({category:ind.category, indicator: ind.code+' '+ind.title, title:''});
+    });
+  });
+
+  document.querySelectorAll('[data-action="toggle-task"]').forEach(function(el){
+    el.addEventListener('click', function(){
+      const id = el.getAttribute('data-id');
+      state.openTaskId = (state.openTaskId===id) ? null : id;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="add-log"]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const id = form.getAttribute('data-id');
+      const fd = new FormData(form);
+      addLog(id, fd.get('note'), fd.get('progress'), fd.get('status'));
+      showToast('已更新執行進度');
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="review-task"]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const id = form.getAttribute('data-id');
+      const fd = new FormData(form);
+      setReview(id, fd.get('reviewStatus'), fd.get('comment'));
+      showToast('已儲存主任批示');
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="set-reminder"]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const id = form.getAttribute('data-id');
+      const fd = new FormData(form);
+      setReminder(id, fd.get('reminderDate'));
+      showToast('已更新提醒日期');
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="delete-task"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(confirm('確定要刪除此工作項目嗎？此動作無法復原。')){
+        deleteTask(btn.getAttribute('data-id'));
+        showToast('已刪除工作項目');
+        render();
+      }
+    });
+  });
+}
+
+/* ====================== 啟動流程 ====================== */
+function renderSetupNeededScreen(){
+  document.getElementById('app').innerHTML = ''
+    + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
+    + '<div class="modal" style="max-width:540px;">'
+    + '  <div class="modal-head"><h2>尚未完成雲端設定</h2>'
+    + '  <p>請依照「Firebase設定教學」文件申請好 Firebase 專案後，把這個檔案最上方設定區塊裡的 <b>FIREBASE_CONFIG</b> 換成您自己專案的金鑰，並把 <b>ACCESS_CODE</b> 改成您自訂的通行碼，存檔後重新整理頁面即可。</p></div>'
+    + '</div></div>';
+}
+function renderAccessGate(){
+  document.getElementById('app').innerHTML = ''
+    + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
+    + '  <div class="modal" style="max-width:420px;">'
+    + '    <div class="modal-head"><h2>大同發展中心工作管理平台</h2><p>請輸入機構通行碼以繼續使用</p></div>'
+    + '    <div class="modal-body">'
+    + '      <input class="full" type="password" id="access-code-input" placeholder="請輸入通行碼" autofocus>'
+    + '      <div class="small-note" id="access-error" style="color:var(--warn); margin-top:8px;"></div>'
+    + '    </div>'
+    + '    <div class="modal-foot"><button class="btn btn-primary" id="access-submit">進入系統</button></div>'
+    + '  </div>'
+    + '</div>';
+  document.getElementById('access-submit').addEventListener('click', checkAccessCode);
+  document.getElementById('access-code-input').addEventListener('keydown', function(e){
+    if(e.key==='Enter'){ checkAccessCode(); }
+  });
+}
+function checkAccessCode(){
+  const v = document.getElementById('access-code-input').value;
+  if(v===ACCESS_CODE){
+    try{ localStorage.setItem('dt-access-granted','1'); }catch(e){}
+    startApp();
+  }else{
+    document.getElementById('access-error').textContent = '通行碼錯誤，請再試一次。';
+  }
+}
+function startApp(){
+  document.getElementById('app').innerHTML = '<div class="empty">連線中…</div>';
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+  }catch(e){
+    document.getElementById('app').innerHTML = '<div class="empty">Firebase 初始化失敗：'+escapeHtml(e.message)+'</div>';
+    return;
+  }
+  const authRef = firebase.auth();
+  db = firebase.firestore();
+  authRef.onAuthStateChanged(function(user){
+    if(user){
+      ensureSeedData().then(function(){
+        attachListeners();
+        loadCurrentUserFromDevice();
+        render();
+      });
+    }else{
+      authRef.signInAnonymously().catch(function(err){
+        document.getElementById('app').innerHTML = '<div class="empty">連線失敗：'+escapeHtml(err.message)+'<br><span class="small-note">請確認 Firebase 設定金鑰是否正確，並已在 Authentication 啟用「匿名」登入方式。</span></div>';
+      });
+    }
+  });
+}
+function boot(){
+  if(isPlaceholderConfig()){ renderSetupNeededScreen(); return; }
+  let granted = false;
+  try{ granted = localStorage.getItem('dt-access-granted')==='1'; }catch(e){}
+  if(granted){ startApp(); } else { renderAccessGate(); }
+}
+boot();
+</script>
+</body>
+</html>
