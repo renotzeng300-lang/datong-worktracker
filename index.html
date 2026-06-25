@@ -637,9 +637,10 @@ function render(){
   }
   app.innerHTML = renderHeader() + renderTabsAndBody();
   bindGlobalEvents();
-  if(state.modal==='newTask'){
-    showNewTaskModal();
-  }
+  /* 注意：「新增工作」視窗是獨立附加在 <body> 上的浮層，
+     由按鈕點擊直接開啟/關閉，不受這裡的畫面重繪影響，
+     絕不可在這裡重新呼叫 showNewTaskModal()，
+     否則背景的即時資料同步會把使用者正在填寫的內容整個換成空白新視窗。 */
 }
 
 function renderIdentityScreen(){
