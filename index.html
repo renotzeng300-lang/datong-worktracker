@@ -233,6 +233,35 @@
   .tag-noscore{background:#EDEAE2; color:#6F6A5E; font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px;}
   .ind-note{width:100%; min-height:34px; font-size:12px; padding:5px 7px;}
   .ind-checkbox{width:17px; height:17px; cursor:pointer;}
+  .ind-status{width:100%; font-size:12.5px; padding:5px 6px;}
+  .ind-evidence{width:100%; font-size:12px; padding:5px 7px;}
+  .core-warning{
+    background:#FBEAD9; border:1px solid #E7B98A; color:#8A3F12;
+    border-radius:var(--radius); padding:12px 16px; font-size:13.5px; font-weight:700;
+    margin-bottom:16px;
+  }
+  .priority-badge{font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px; flex:none; white-space:nowrap;}
+  .priority-高{background:#F5E4D7; color:#9C4A1F;}
+  .priority-中{background:#EDEAE2; color:#6F6A5E;}
+  .priority-低{background:#E9EFE3; color:#4F6B43;}
+  .cycle-tag{font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:999px; background:#EDEAE2; color:#6F6A5E; flex:none; white-space:nowrap;}
+  .activity-stale{color:var(--warn); font-weight:700;}
+  .activity-row{display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px dashed var(--line); font-size:13px;}
+  .activity-row:last-child{border-bottom:none;}
+  .draft-banner{
+    background:var(--accent-soft); border:1px solid #CFE3DC; border-radius:8px;
+    padding:8px 12px; font-size:12px; color:var(--accent-ink); margin-bottom:12px;
+  }
+  @media (max-width:760px){
+    .ind-table thead{display:none;}
+    .ind-table, .ind-table tbody, .ind-table tr, .ind-table td{display:block; width:100%;}
+    .ind-table tr{border-bottom:6px solid var(--bg); padding:10px 4px;}
+    .ind-table td{border-bottom:none; padding:6px 4px;}
+    .ind-table td[data-label]::before{
+      content:attr(data-label); display:block; font-size:10.5px; font-weight:700;
+      color:var(--ink-faint); text-transform:uppercase; margin-bottom:3px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -368,15 +397,50 @@ function matchIndicatorCode(text){
 function tasksForIndicator(code){
   return state.tasks.filter(function(t){ return matchIndicatorCode(t.indicator)===code.toUpperCase(); });
 }
+function indicatorStatus(code){
+  const c = state.indicatorChecklist[code] || {};
+  return c.status || (c.checked ? '已備妥' : '未備妥'); /* 相容舊資料：舊版只有 checked 布林值 */
+}
 function indicatorStats(){
-  let ready=0, withTask=0, coreTotal=0, coreReady=0;
+  let ready=0, notReady=0, na=0, withTask=0, coreTotal=0, coreNotReady=0;
   INDICATORS.forEach(function(ind){
-    const c = state.indicatorChecklist[ind.code] || {};
-    if(c.checked) ready++;
+    const st = indicatorStatus(ind.code);
+    if(st==='已備妥') ready++;
+    else if(st==='不適評') na++;
+    else notReady++;
     if(tasksForIndicator(ind.code).length>0) withTask++;
-    if(ind.isCore){ coreTotal++; if(c.checked) coreReady++; }
+    if(ind.isCore){
+      coreTotal++;
+      if(st!=='已備妥' && st!=='不適評') coreNotReady++;
+    }
   });
-  return {total:INDICATORS.length, ready:ready, withTask:withTask, coreTotal:coreTotal, coreReady:coreReady};
+  const applicable = INDICATORS.length - na; /* 排除不適評後的適用指標總數 */
+  return {total:INDICATORS.length, applicable:applicable, ready:ready, notReady:notReady, na:na, withTask:withTask, coreTotal:coreTotal, coreNotReady:coreNotReady};
+}
+function staffActivity(){
+  /* 統計每位人員最後一次登打（任何工作項目的 log）距今天數，用於偵測久無動靜的同仁 */
+  const lastByName = {};
+  state.tasks.forEach(function(t){
+    t.logs.forEach(function(l){
+      const name = (l.author||'').replace('（主任批示）','').trim();
+      if(!name) return;
+      if(!lastByName[name] || l.date > lastByName[name]) lastByName[name] = l.date;
+    });
+  });
+  const today = todayStr();
+  return state.roster.map(function(r){
+    const last = lastByName[r.name] || null;
+    let days = null;
+    if(last){
+      days = Math.round((new Date(today) - new Date(last)) / 86400000);
+    }
+    return {name:r.name, role:r.role, last:last, days:days};
+  }).sort(function(a,b){
+    if(a.days===null && b.days===null) return 0;
+    if(a.days===null) return -1;
+    if(b.days===null) return 1;
+    return b.days - a.days;
+  });
 }
 
 
@@ -542,10 +606,14 @@ function visibleTasks(scope){
   if(state.filter.category!=='all'){ list = list.filter(function(t){ return t.category===state.filter.category; }); }
   if(state.filter.assignee!=='all'){ list = list.filter(function(t){ return t.assignee===state.filter.assignee; }); }
   if(state.filter.status!=='all'){ list = list.filter(function(t){ return t.status===state.filter.status; }); }
+  const priorityRank = {'高':0,'中':1,'低':2};
   list.sort(function(a,b){
     const ao = isOverdue(a) ? 0 : 1;
     const bo = isOverdue(b) ? 0 : 1;
     if(ao!==bo) return ao-bo;
+    const ap = priorityRank[a.priority||'中'];
+    const bp = priorityRank[b.priority||'中'];
+    if(ap!==bp) return ap-bp;
     return (a.endDate||'9999').localeCompare(b.endDate||'9999');
   });
   return list;
@@ -585,6 +653,9 @@ function createTask(data){
     id: ref.id,
     category: data.category, title: data.title, indicator: data.indicator||'',
     assignee: data.assignee, role: data.role,
+    cycle: data.cycle || defaultCycle(),
+    priority: data.priority || '中',
+    evidenceUrl: data.evidenceUrl || '',
     startDate: data.startDate||todayStr(), endDate: data.endDate||'',
     progress: Number(data.progress)||0, status: data.status||'未開始',
     reminderDate: data.reminderDate||'',
@@ -595,6 +666,11 @@ function createTask(data){
   };
   addToRoster(data.assignee, data.role);
   ref.set(t).then(function(){ showToast('已新增工作項目'); }).catch(function(err){ showToast('新增失敗：'+err.message, true); });
+}
+function defaultCycle(){
+  /* 預設帶入民國年度，方便標記評鑑梯次，例如 2026 -> 115年度 */
+  const y = new Date().getFullYear() - 1911;
+  return y + '年度';
 }
 function addLog(taskId, note, progress, status){
   const t = findTask(taskId); if(!t) return;
@@ -619,6 +695,16 @@ function setReview(taskId, reviewStatus, comment){
 function setReminder(taskId, dateStr){
   db.collection('tasks').doc(taskId).update({reminderDate: dateStr})
     .then(function(){ showToast('已更新提醒日期'); })
+    .catch(function(err){ showToast('更新失敗：'+err.message, true); });
+}
+function setEvidence(taskId, url){
+  db.collection('tasks').doc(taskId).update({evidenceUrl: url})
+    .then(function(){ showToast('已更新佐證資料連結'); })
+    .catch(function(err){ showToast('更新失敗：'+err.message, true); });
+}
+function setPriority(taskId, priority){
+  db.collection('tasks').doc(taskId).update({priority: priority})
+    .then(function(){ showToast('已更新優先順序'); })
     .catch(function(err){ showToast('更新失敗：'+err.message, true); });
 }
 function deleteTask(taskId){
@@ -769,10 +855,11 @@ function renderOverview(){
 
   html += '<div class="panel" style="margin-bottom:18px;">'
     + '  <div class="panel-pad" style="padding-bottom:4px;"><div class="section-title">指標準備度</div><div class="section-sub">對照「109評鑑指標」共'+INDICATORS.length+'項，詳細勾選請至「指標對照表」分頁</div></div>'
+    +     (ind.coreNotReady>0 ? '<div style="padding:0 20px;"><div class="core-warning" style="margin-bottom:14px;">⚠️ 核心指標尚有 '+ind.coreNotReady+' 項未達「已備妥」，將導致評鑑等第降一等</div></div>' : '')
     + '  <div class="stat-grid" style="padding:0 20px 18px; margin-bottom:0;">'
-    +     statCard(ind.ready+'/'+ind.total,'資料已備妥','good')
+    +     statCard(ind.ready+'/'+ind.applicable,'資料已備妥（適用指標）','good')
     +     statCard(ind.withTask+'/'+ind.total,'已建立對應工作','good')
-    +     statCard(ind.coreReady+'/'+ind.coreTotal,'核心指標達成','warn')
+    +     statCard(ind.coreTotal-ind.coreNotReady+'/'+ind.coreTotal,'核心指標達成','warn')
     +     statCard(s.total,'目前追蹤工作總數','')
     + '  </div>'
     + '</div>';
@@ -831,6 +918,7 @@ function renderTaskCard(t){
   const overdue = isOverdue(t);
   const isDirector = state.currentUser.role==='主任';
   const canEdit = isDirector || t.assignee===state.currentUser.name;
+  const priority = t.priority || '中';
 
   let head = '<div class="task-head" data-action="toggle-task" data-id="'+t.id+'">'
     + '<div class="cat-stripe" style="background:'+cat.color+'"></div>'
@@ -845,11 +933,14 @@ function renderTaskCard(t){
     +   '<div class="task-title-row">'
     +     '<span class="task-title">'+escapeHtml(t.title)+'</span>'
     +     (t.indicator? '<span class="cat-badge" style="background:'+cat.soft+'; color:'+cat.color+'">'+escapeHtml(t.indicator)+'</span>' : '')
+    +     '<span class="priority-badge priority-'+priority+'">優先：'+priority+'</span>'
+    +     (t.cycle? '<span class="cycle-tag">'+escapeHtml(t.cycle)+'</span>' : '')
     +   '</div>'
     +   '<div class="task-meta">'
     +     '<span>👤 '+escapeHtml(t.assignee)+'（'+escapeHtml(t.role)+'）</span>'
     +     '<span>🗓 '+ (t.startDate||'—') +' ～ '+ (t.endDate||'未定') +'</span>'
     +     (t.reminderDate? '<span>⏰ 提醒：'+t.reminderDate+'</span>' : '')
+    +     (t.evidenceUrl? '<span>🔗 <a href="'+escapeHtml(t.evidenceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">佐證資料</a></span>' : '')
     +   '</div>'
     + '</div>'
     + (overdue? '<span class="overdue-flag">逾期待辦</span>' : '')
@@ -869,8 +960,10 @@ function renderTaskCard(t){
         }).join('')
     + '</div>';
   if(canEdit){
+    let draftNote = '';
+    try{ draftNote = localStorage.getItem('dt-log-draft-'+t.id) || ''; }catch(e){}
     body += '<form data-action="add-log" data-id="'+t.id+'">'
-      + '<div class="field-block"><label class="field-label">登打本次執行說明</label><textarea name="note" placeholder="說明本次進度、遇到的問題或已完成事項…" required></textarea></div>'
+      + '<div class="field-block"><label class="field-label">登打本次執行說明</label><textarea name="note" class="log-draft-input" data-task-id="'+t.id+'" placeholder="說明本次進度、遇到的問題或已完成事項…" required>'+escapeHtml(draftNote)+'</textarea></div>'
       + '<div class="row-2">'
       +   '<div class="field-block"><label class="field-label">最新進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+(t.progress||0)+'"></div>'
       +   '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(t.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
@@ -882,7 +975,7 @@ function renderTaskCard(t){
   }
   body += '</div>';
 
-  // 右：主任批改 / 提醒設定
+  // 右：主任批改 / 提醒設定 / 優先順序 / 佐證資料
   body += '<div>';
   if(isDirector){
     body += '<div class="director-box">'
@@ -901,6 +994,20 @@ function renderTaskCard(t){
       +     '<button class="btn btn-sm" type="submit">更新提醒</button>'
       +   '</div>'
       + '</form>'
+      + '<form data-action="set-priority" data-id="'+t.id+'" style="margin-top:12px;">'
+      +   '<label class="field-label">優先順序</label>'
+      +   '<div class="row-2">'
+      +     '<select class="full" name="priority">'+['高','中','低'].map(function(p){ return '<option value="'+p+'"'+(priority===p?' selected':'')+'>'+p+'</option>'; }).join('')+'</select>'
+      +     '<button class="btn btn-sm" type="submit">更新優先順序</button>'
+      +   '</div>'
+      + '</form>'
+      + '<form data-action="set-evidence" data-id="'+t.id+'" style="margin-top:12px;">'
+      +   '<label class="field-label">佐證資料連結</label>'
+      +   '<div class="row-2">'
+      +     '<input class="full" type="text" name="evidenceUrl" value="'+escapeHtml(t.evidenceUrl||'')+'" placeholder="貼上雲端硬碟連結…">'
+      +     '<button class="btn btn-sm" type="submit">更新連結</button>'
+      +   '</div>'
+      + '</form>'
       + '<button class="btn btn-ghost btn-sm" style="margin-top:14px;" data-action="delete-task" data-id="'+t.id+'">刪除此工作項目</button>';
   } else {
     body += '<div class="director-box"><label class="field-label">主任備註</label><div style="font-size:13px;">'+(t.directorComment? escapeHtml(t.directorComment) : '<span class="small-note">尚無主任備註。</span>')+'</div></div>'
@@ -912,8 +1019,22 @@ function renderTaskCard(t){
 }
 
 function renderReviewPanel(){
+  let html = '<div class="panel" style="margin-bottom:18px;">'
+    + '  <div class="panel-pad" style="padding-bottom:6px;"><div class="section-title">人員活躍度</div><div class="section-sub">依「最近一次登打紀錄」排序，太久沒有任何更新的同仁會以紅色標示，方便您主動關心進度</div></div>'
+    + '  <div class="panel-pad" style="padding-top:0;">'
+    +     staffActivity().map(function(s){
+            const idleText = s.last ? (s.days+' 天前（'+s.last+'）') : '尚無任何登打紀錄';
+            const stale = s.days===null || s.days>=14;
+            return '<div class="activity-row">'
+              + '<span>'+escapeHtml(s.name)+'（'+escapeHtml(s.role)+'）</span>'
+              + '<span class="'+(stale?'activity-stale':'')+'">'+idleText+'</span>'
+              + '</div>';
+          }).join('')
+    + '  </div>'
+    + '</div>';
+
   const pending = state.tasks.filter(function(t){ return t.reviewStatus==='待審核' || isOverdue(t); });
-  let html = '<div class="panel" style="margin-bottom:14px;"><div class="panel-pad"><div class="section-title">需要您留意的項目</div><div class="section-sub">包含尚待審核的執行回報，以及已到達提醒日期但尚未完成的工作</div></div></div>';
+  html += '<div class="panel" style="margin-bottom:14px;"><div class="panel-pad"><div class="section-title">需要您留意的項目</div><div class="section-sub">包含尚待審核的執行回報，以及已到達提醒日期但尚未完成的工作</div></div></div>';
   if(pending.length===0){
     html += '<div class="panel"><div class="empty"><div class="big">✅</div>目前沒有待審核或逾期的工作項目。</div></div>';
     return html;
@@ -932,11 +1053,17 @@ function linkedCellHtml(code){
 }
 function renderIndicatorPanel(){
   const stats = indicatorStats();
-  let html = '<div class="stat-grid">'
-    + statCard(stats.total,'指標總數','')
-    + statCard(stats.ready+'/'+stats.total,'資料已備妥','good')
-    + statCard(stats.withTask+'/'+stats.total,'已建立對應工作項目','good')
-    + statCard(stats.coreReady+'/'+stats.coreTotal,'核心指標達成','warn')
+  let html = '';
+
+  if(stats.coreNotReady>0){
+    html += '<div class="core-warning">⚠️ 核心指標尚有 '+stats.coreNotReady+' 項未達「已備妥」——核心指標未達滿分將導致評鑑等第降一等，請優先處理。</div>';
+  }
+
+  html += '<div class="stat-grid">'
+    + statCard(stats.applicable,'適用指標數（已排除不適評）','')
+    + statCard(stats.ready+'/'+stats.applicable,'資料已備妥','good')
+    + statCard(stats.na,'標記不適評','')
+    + statCard(stats.coreTotal-stats.coreNotReady+'/'+stats.coreTotal,'核心指標達成','warn')
     + '</div>';
 
   html += '<div class="filter-bar">'
@@ -948,12 +1075,13 @@ function renderIndicatorPanel(){
     +   '<option value="all">全部狀態</option>'
     +   '<option value="ready"'+(state.indFilter.readiness==='ready'?' selected':'')+'>已備妥</option>'
     +   '<option value="notReady"'+(state.indFilter.readiness==='notReady'?' selected':'')+'>尚未備妥</option>'
+    +   '<option value="na"'+(state.indFilter.readiness==='na'?' selected':'')+'>不適評</option>'
     +   '<option value="hasTask"'+(state.indFilter.readiness==='hasTask'?' selected':'')+'>已有對應工作項目</option>'
     +   '<option value="noTask"'+(state.indFilter.readiness==='noTask'?' selected':'')+'>尚無對應工作項目</option>'
     + '</select>'
     + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);"><input type="checkbox" id="ind-core-only" '+(state.indFilter.core?'checked':'')+'> 只看核心指標</label>'
     + '<div class="spacer"></div>'
-    + '<div class="small-note" style="max-width:260px;text-align:right;">勾選「已備妥」標記佐證資料已準備完成；點「＋建立工作」可直接為該指標建立追蹤項目</div>'
+    + '<div class="small-note" style="max-width:260px;text-align:right;">「不適評」指機構此項免評（如服務型態不適用），不計入備妥率分母</div>'
     + '</div>';
 
   let anyGroup = false;
@@ -962,10 +1090,11 @@ function renderIndicatorPanel(){
     let items = INDICATORS.filter(function(ind){ return ind.category===cat.id; });
     if(state.indFilter.core) items = items.filter(function(ind){ return ind.isCore; });
     items = items.filter(function(ind){
-      const c = state.indicatorChecklist[ind.code] || {};
+      const st = indicatorStatus(ind.code);
       const hasTask = tasksForIndicator(ind.code).length>0;
-      if(state.indFilter.readiness==='ready') return !!c.checked;
-      if(state.indFilter.readiness==='notReady') return !c.checked;
+      if(state.indFilter.readiness==='ready') return st==='已備妥';
+      if(state.indFilter.readiness==='notReady') return st==='未備妥';
+      if(state.indFilter.readiness==='na') return st==='不適評';
       if(state.indFilter.readiness==='hasTask') return hasTask;
       if(state.indFilter.readiness==='noTask') return !hasTask;
       return true;
@@ -975,17 +1104,23 @@ function renderIndicatorPanel(){
     html += '<div class="ind-group">'
       + '<div class="ind-group-title"><span class="dot" style="background:'+cat.color+'"></span>'+cat.label+'（'+items.length+' 項）</div>'
       + '<table class="ind-table"><thead><tr>'
-      +   '<th style="width:64px;">已備妥</th><th style="width:90px;">指標編號</th><th>指標名稱</th><th style="width:200px;">對應工作項目</th><th style="width:220px;">備註</th><th style="width:96px;">操作</th>'
+      +   '<th style="width:110px;">備妥狀態</th><th style="width:90px;">指標編號</th><th>指標名稱</th><th style="width:180px;">對應工作項目</th><th style="width:190px;">備註</th><th style="width:150px;">佐證資料連結</th><th style="width:96px;">操作</th>'
       + '</tr></thead><tbody>'
       +   items.map(function(ind){
             const c = state.indicatorChecklist[ind.code] || {};
+            const st = indicatorStatus(ind.code);
             return '<tr>'
-              + '<td><input type="checkbox" class="ind-checkbox" data-action="ind-check" data-code="'+ind.code+'" '+(c.checked?'checked':'')+'></td>'
-              + '<td class="ind-code">'+ind.code+'</td>'
-              + '<td>'+escapeHtml(ind.title)+indicatorTags(ind)+'</td>'
-              + '<td>'+linkedCellHtml(ind.code)+'</td>'
-              + '<td><textarea class="ind-note" data-action="ind-note" data-code="'+ind.code+'" placeholder="備註／佐證資料存放位置…">'+escapeHtml(c.note||'')+'</textarea></td>'
-              + '<td><button class="btn btn-sm" data-action="ind-new-task" data-code="'+ind.code+'">＋建立工作</button></td>'
+              + '<td data-label="備妥狀態"><select class="ind-status" data-action="ind-status" data-code="'+ind.code+'">'
+              +   ['未備妥','已備妥','不適評'].map(function(s){ return '<option value="'+s+'"'+(st===s?' selected':'')+'>'+s+'</option>'; }).join('')
+              + '</select></td>'
+              + '<td data-label="指標編號" class="ind-code">'+ind.code+'</td>'
+              + '<td data-label="指標名稱">'+escapeHtml(ind.title)+indicatorTags(ind)+'</td>'
+              + '<td data-label="對應工作項目">'+linkedCellHtml(ind.code)+'</td>'
+              + '<td data-label="備註"><textarea class="ind-note" data-action="ind-note" data-code="'+ind.code+'" placeholder="備註說明…">'+escapeHtml(c.note||'')+'</textarea></td>'
+              + '<td data-label="佐證資料連結"><input type="text" class="ind-evidence" data-action="ind-evidence" data-code="'+ind.code+'" value="'+escapeHtml(c.evidenceUrl||'')+'" placeholder="貼上雲端硬碟連結…">'
+              +   (c.evidenceUrl ? '<div style="margin-top:4px;"><a href="'+escapeHtml(c.evidenceUrl)+'" target="_blank" rel="noopener">🔗 開啟資料</a></div>' : '')
+              + '</td>'
+              + '<td data-label="操作"><button class="btn btn-sm" data-action="ind-new-task" data-code="'+ind.code+'">＋建立工作</button></td>'
               + '</tr>';
           }).join('')
       + '</tbody></table>'
@@ -1000,6 +1135,12 @@ function renderIndicatorPanel(){
 
 function showNewTaskModal(presets){
   presets = presets || {};
+  let draft = null;
+  try{ const raw = localStorage.getItem('dt-new-task-draft'); if(raw) draft = JSON.parse(raw); }catch(e){}
+  const v = function(field, fallback){
+    if(draft && draft[field]!=null && draft[field]!=='') return draft[field];
+    return (presets[field]!=null ? presets[field] : (fallback!=null ? fallback : ''));
+  };
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'new-task-overlay';
@@ -1008,47 +1149,66 @@ function showNewTaskModal(presets){
     + '<div class="modal">'
     + '  <div class="modal-head"><h2>新增工作項目</h2><p>登打工作項目、負責人、執行期間與初始進度</p></div>'
     + '  <div class="modal-body">'
+    +     (draft ? '<div class="draft-banner">📝 已自動回復您上次未送出的草稿內容，確認無誤後可直接送出。</div>' : '')
     + '    <form id="new-task-form">'
-    + '      <div class="field-block"><label class="field-label">工作項目名稱</label><input class="full" type="text" name="title" value="'+escapeHtml(presets.title||'')+'" placeholder="例如：更新工作手冊與緊急通報窗口資料" required></div>'
+    + '      <div class="field-block"><label class="field-label">工作項目名稱</label><input class="full" type="text" name="title" value="'+escapeHtml(v('title'))+'" placeholder="例如：更新工作手冊與緊急通報窗口資料" required></div>'
     + '      <div class="row-2">'
-    + '        <div class="field-block"><label class="field-label">對應評鑑面向</label><select class="full" name="category">'+CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(presets.category===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')+'</select></div>'
-    + '        <div class="field-block"><label class="field-label">對應指標編號（選填）</label><input class="full" type="text" name="indicator" value="'+escapeHtml(presets.indicator||'')+'" placeholder="例如：1102 機構管理制度" list="indicator-suggestions"></div>'
+    + '        <div class="field-block"><label class="field-label">對應評鑑面向</label><select class="full" name="category">'+CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(v('category')===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')+'</select></div>'
+    + '        <div class="field-block"><label class="field-label">對應指標編號（選填）</label><input class="full" type="text" name="indicator" value="'+escapeHtml(v('indicator'))+'" placeholder="例如：1102 機構管理制度" list="indicator-suggestions"></div>'
     + '      </div>'
     + '      <datalist id="indicator-suggestions">'+INDICATORS.map(function(i){ return '<option value="'+i.code+' '+escapeHtml(i.title)+'">'; }).join('')+'</datalist>'
     + '      <div class="row-2">'
-    + '        <div class="field-block"><label class="field-label">負責人姓名</label><input class="full" type="text" name="assignee" list="roster-names-modal" value="'+escapeHtml(state.currentUser.name)+'" required></div>'
-    + '        <div class="field-block"><label class="field-label">負責人角色</label><select class="full" name="role">'+ROLES.map(function(r){ return '<option value="'+r+'"'+(r===state.currentUser.role?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></div>'
+    + '        <div class="field-block"><label class="field-label">負責人姓名</label><input class="full" type="text" name="assignee" list="roster-names-modal" value="'+escapeHtml(v('assignee', state.currentUser.name))+'" required></div>'
+    + '        <div class="field-block"><label class="field-label">負責人角色</label><select class="full" name="role">'+ROLES.map(function(r){ return '<option value="'+r+'"'+(r===v('role', state.currentUser.role)?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></div>'
     + '      </div>'
     + '      <datalist id="roster-names-modal">'+assignees.map(function(a){ return '<option value="'+escapeHtml(a)+'">'; }).join('')+'</datalist>'
     + '      <div class="row-2">'
-    + '        <div class="field-block"><label class="field-label">開始日期</label><input class="full" type="date" name="startDate" value="'+todayStr()+'"></div>'
-    + '        <div class="field-block"><label class="field-label">預計完成日期</label><input class="full" type="date" name="endDate"></div>'
+    + '        <div class="field-block"><label class="field-label">評鑑梯次</label><input class="full" type="text" name="cycle" value="'+escapeHtml(v('cycle', defaultCycle()))+'" placeholder="例如：115年度"></div>'
+    + '        <div class="field-block"><label class="field-label">優先順序</label><select class="full" name="priority">'+['高','中','低'].map(function(p){ return '<option value="'+p+'"'+(v('priority','中')===p?' selected':'')+'>'+p+'</option>'; }).join('')+'</select></div>'
     + '      </div>'
     + '      <div class="row-2">'
-    + '        <div class="field-block"><label class="field-label">初始進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="0"></div>'
-    + '        <div class="field-block"><label class="field-label">初始狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('')+'</select></div>'
+    + '        <div class="field-block"><label class="field-label">開始日期</label><input class="full" type="date" name="startDate" value="'+escapeHtml(v('startDate', todayStr()))+'"></div>'
+    + '        <div class="field-block"><label class="field-label">預計完成日期</label><input class="full" type="date" name="endDate" value="'+escapeHtml(v('endDate'))+'"></div>'
     + '      </div>'
-    + '      <div class="field-block"><label class="field-label">提醒日期（選填）</label><input class="full" type="date" name="reminderDate"></div>'
-    + '      <div class="field-block"><label class="field-label">說明（選填）</label><textarea name="note" placeholder="補充工作內容、依據或備註…"></textarea></div>'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">初始進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+escapeHtml(v('progress','0'))+'"></div>'
+    + '        <div class="field-block"><label class="field-label">初始狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(v('status')===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
+    + '      </div>'
+    + '      <div class="field-block"><label class="field-label">提醒日期（選填）</label><input class="full" type="date" name="reminderDate" value="'+escapeHtml(v('reminderDate'))+'"></div>'
+    + '      <div class="field-block"><label class="field-label">佐證資料連結（選填）</label><input class="full" type="text" name="evidenceUrl" value="'+escapeHtml(v('evidenceUrl'))+'" placeholder="貼上雲端硬碟、共用資料夾連結…"></div>'
+    + '      <div class="field-block"><label class="field-label">說明（選填）</label><textarea name="note" placeholder="補充工作內容、依據或備註…">'+escapeHtml(v('note'))+'</textarea></div>'
     + '    </form>'
     + '  </div>'
     + '  <div class="modal-foot"><button class="btn" id="new-task-cancel">取消</button><button class="btn btn-primary" id="new-task-submit">新增</button></div>'
     + '</div>';
   document.body.appendChild(overlay);
 
+  const form = document.getElementById('new-task-form');
+  function saveDraft(){
+    try{
+      const fd = new FormData(form);
+      const obj = {};
+      fd.forEach(function(val,key){ obj[key]=val; });
+      localStorage.setItem('dt-new-task-draft', JSON.stringify(obj));
+    }catch(e){}
+  }
+  form.addEventListener('input', saveDraft);
+  form.addEventListener('change', saveDraft);
+
   overlay.addEventListener('click', function(e){ if(e.target===overlay){ closeNewTaskModal(); } });
   document.getElementById('new-task-cancel').addEventListener('click', closeNewTaskModal);
   document.getElementById('new-task-submit').addEventListener('click', function(){
-    const form = document.getElementById('new-task-form');
     if(!form.checkValidity()){ form.reportValidity(); return; }
     const fd = new FormData(form);
     createTask({
       title: fd.get('title'), category: fd.get('category'), indicator: fd.get('indicator'),
       assignee: fd.get('assignee'), role: fd.get('role'),
+      cycle: fd.get('cycle'), priority: fd.get('priority'), evidenceUrl: fd.get('evidenceUrl'),
       startDate: fd.get('startDate'), endDate: fd.get('endDate'),
       progress: fd.get('progress'), status: fd.get('status'),
       reminderDate: fd.get('reminderDate'), note: fd.get('note')
     });
+    try{ localStorage.removeItem('dt-new-task-draft'); }catch(e){}
     closeNewTaskModal();
     showToast('已新增工作項目');
     render();
@@ -1072,6 +1232,8 @@ function exportReport(){
     const taskRows = state.tasks.map(function(t){
       const lastLog = t.logs[t.logs.length-1] || {};
       return {
+        '評鑑梯次': t.cycle||'',
+        '優先順序': t.priority||'中',
         '評鑑面向': catInfo(t.category).label,
         '對應指標': t.indicator||'',
         '工作項目': t.title,
@@ -1084,6 +1246,7 @@ function exportReport(){
         '主任批示': t.reviewStatus,
         '主任備註': t.directorComment||'',
         '提醒日期': t.reminderDate||'',
+        '佐證資料連結': t.evidenceUrl||'',
         '最新執行說明': lastLog.note||'',
         '最新更新日期': lastLog.date||'',
         '建立人': t.createdBy,
@@ -1101,9 +1264,10 @@ function exportReport(){
         '評鑑面向': catInfo(ind.category).label,
         '指標名稱': ind.title,
         '標籤': [ind.isCore?'核心指標':'', ind.isNew?'新增指標':'', ind.noScore?'不計分':''].filter(Boolean).join('、'),
-        '資料已備妥': c.checked?'是':'否',
+        '備妥狀態': indicatorStatus(ind.code),
         '對應工作項目數': linked.length,
         '對應工作項目': linked.map(function(t){ return t.title; }).join('；'),
+        '佐證資料連結': c.evidenceUrl||'',
         '備註': c.note||''
       };
     });
@@ -1151,11 +1315,11 @@ function bindGlobalEvents(){
   const indCoreChk = document.getElementById('ind-core-only');
   if(indCoreChk) indCoreChk.addEventListener('change', function(){ state.indFilter.core = indCoreChk.checked; render(); });
 
-  document.querySelectorAll('[data-action="ind-check"]').forEach(function(cb){
-    cb.addEventListener('change', function(){
-      const code = cb.getAttribute('data-code');
+  document.querySelectorAll('[data-action="ind-status"]').forEach(function(sel){
+    sel.addEventListener('change', function(){
+      const code = sel.getAttribute('data-code');
       const existing = state.indicatorChecklist[code] || {};
-      const updated = Object.assign({}, existing, {checked: cb.checked});
+      const updated = Object.assign({}, existing, {status: sel.value, checked: sel.value==='已備妥'});
       const fieldUpdate = {}; fieldUpdate[code] = updated;
       db.collection('app').doc('indicatorChecklist').set(fieldUpdate, {merge:true})
         .catch(function(err){ showToast('儲存失敗：'+err.message, true); });
@@ -1169,6 +1333,16 @@ function bindGlobalEvents(){
       const fieldUpdate = {}; fieldUpdate[code] = updated;
       db.collection('app').doc('indicatorChecklist').set(fieldUpdate, {merge:true})
         .catch(function(err){ showToast('備註儲存失敗：'+err.message, true); });
+    });
+  });
+  document.querySelectorAll('[data-action="ind-evidence"]').forEach(function(inp){
+    inp.addEventListener('blur', function(){
+      const code = inp.getAttribute('data-code');
+      const existing = state.indicatorChecklist[code] || {};
+      const updated = Object.assign({}, existing, {evidenceUrl: inp.value.trim()});
+      const fieldUpdate = {}; fieldUpdate[code] = updated;
+      db.collection('app').doc('indicatorChecklist').set(fieldUpdate, {merge:true})
+        .catch(function(err){ showToast('連結儲存失敗：'+err.message, true); });
     });
   });
   document.querySelectorAll('[data-action="ind-new-task"]').forEach(function(btn){
@@ -1194,8 +1368,14 @@ function bindGlobalEvents(){
       const id = form.getAttribute('data-id');
       const fd = new FormData(form);
       addLog(id, fd.get('note'), fd.get('progress'), fd.get('status'));
+      try{ localStorage.removeItem('dt-log-draft-'+id); }catch(err){}
       showToast('已更新執行進度');
       render();
+    });
+  });
+  document.querySelectorAll('.log-draft-input').forEach(function(ta){
+    ta.addEventListener('input', function(){
+      try{ localStorage.setItem('dt-log-draft-'+ta.getAttribute('data-task-id'), ta.value); }catch(e){}
     });
   });
 
@@ -1217,6 +1397,26 @@ function bindGlobalEvents(){
       const fd = new FormData(form);
       setReminder(id, fd.get('reminderDate'));
       showToast('已更新提醒日期');
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="set-priority"]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const id = form.getAttribute('data-id');
+      const fd = new FormData(form);
+      setPriority(id, fd.get('priority'));
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="set-evidence"]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const id = form.getAttribute('data-id');
+      const fd = new FormData(form);
+      setEvidence(id, fd.get('evidenceUrl'));
       render();
     });
   });
