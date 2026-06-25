@@ -1705,6 +1705,12 @@ function startApp(){
     try{
       db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
     }catch(e){ /* 若此 SDK 版本不支援該設定，略過即可，不影響其他功能 */ }
+    try{
+      /* 啟用離線持久化：即使網路一時斷線或頁面被重新整理，
+         尚未送出的寫入動作會留在裝置本機，待連線恢復後自動補送，
+         避免畫面顯示過的資料因連線問題而無聲消失。 */
+      db.enablePersistence({synchronizeTabs:true}).catch(function(e){ /* 多分頁衝突或瀏覽器不支援時略過，不影響主要功能 */ });
+    }catch(e){}
     authRef.onAuthStateChanged(function(user){
       settled = true;
       clearTimeout(timeoutId);
