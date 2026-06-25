@@ -751,7 +751,7 @@ function createTask(data){
     logs: [{date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note: data.note || '建立工作項目。', progress:Number(data.progress)||0, status:data.status||'未開始'}]
   };
   addToRoster(data.assignee, data.role);
-  ref.set(t).then(function(){ showToast('已新增工作項目'); }).catch(function(err){ showToast('新增失敗：'+err.message, true); });
+  return ref.set(t); /* 回傳 Promise，呼叫端應等待真正寫入成功後才關閉視窗／清除草稿，避免使用者過早重新整理導致資料遺失 */
 }
 function defaultCycle(){
   /* 預設帶入民國年度，方便標記評鑑梯次，例如 2026 -> 115年度 */
@@ -759,15 +759,15 @@ function defaultCycle(){
   return y + '年度';
 }
 function addLog(taskId, note, progress, status){
-  const t = findTask(taskId); if(!t) return;
+  const t = findTask(taskId); if(!t) return Promise.reject(new Error('找不到工作項目'));
   const logEntry = {date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note:note, progress:Number(progress), status:status};
   const newReviewStatus = (status==='已完成' && t.reviewStatus!=='已核可') ? '待審核' : t.reviewStatus;
-  db.collection('tasks').doc(taskId).update({
+  return db.collection('tasks').doc(taskId).update({
     progress: Number(progress),
     status: status,
     reviewStatus: newReviewStatus,
     logs: firebase.firestore.FieldValue.arrayUnion(logEntry)
-  }).then(function(){ showToast('已更新執行進度'); }).catch(function(err){ showToast('更新失敗：'+err.message, true); });
+  });
 }
 function setReview(taskId, reviewStatus, comment){
   const t = findTask(taskId); if(!t) return;
@@ -1382,6 +1382,10 @@ function showNewTaskModal(presets){
   document.getElementById('new-task-cancel').addEventListener('click', closeNewTaskModal);
   document.getElementById('new-task-submit').addEventListener('click', function(){
     if(!form.checkValidity()){ form.reportValidity(); return; }
+    const submitBtn = document.getElementById('new-task-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '儲存中…請稍候，完成前請勿關閉或重新整理';
+    state.saving = true;
     const fd = new FormData(form);
     createTask({
       title: fd.get('title'), category: fd.get('category'), indicator: fd.get('indicator'),
@@ -1390,11 +1394,18 @@ function showNewTaskModal(presets){
       startDate: fd.get('startDate'), endDate: fd.get('endDate'),
       progress: fd.get('progress'), status: fd.get('status'),
       reminderDate: fd.get('reminderDate'), note: fd.get('note')
+    }).then(function(){
+      state.saving = false;
+      try{ localStorage.removeItem('dt-new-task-draft'); }catch(e){}
+      closeNewTaskModal();
+      showToast('已新增工作項目（已確認儲存於雲端）');
+      render();
+    }).catch(function(err){
+      state.saving = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = '新增';
+      showToast('新增失敗，請檢查網路後再試一次：'+err.message, true);
     });
-    try{ localStorage.removeItem('dt-new-task-draft'); }catch(e){}
-    closeNewTaskModal();
-    showToast('已新增工作項目');
-    render();
   });
 }
 function closeNewTaskModal(){
@@ -1550,10 +1561,19 @@ function bindGlobalEvents(){
       e.preventDefault();
       const id = form.getAttribute('data-id');
       const fd = new FormData(form);
-      addLog(id, fd.get('note'), fd.get('progress'), fd.get('status'));
-      try{ localStorage.removeItem('dt-log-draft-'+id); }catch(err){}
-      showToast('已更新執行進度');
-      render();
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = '儲存中…請稍候'; }
+      state.saving = true;
+      addLog(id, fd.get('note'), fd.get('progress'), fd.get('status')).then(function(){
+        state.saving = false;
+        try{ localStorage.removeItem('dt-log-draft-'+id); }catch(err){}
+        showToast('已更新執行進度（已確認儲存於雲端）');
+        render();
+      }).catch(function(err){
+        state.saving = false;
+        if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = '送出更新'; }
+        showToast('更新失敗，請檢查網路後再試一次：'+err.message, true);
+      });
     });
   });
   document.querySelectorAll('.log-draft-input').forEach(function(ta){
@@ -1751,6 +1771,13 @@ function boot(){
   try{ granted = localStorage.getItem('dt-access-granted')==='1'; }catch(e){}
   if(granted){ startApp(); } else { renderAccessGate(); }
 }
+window.addEventListener('beforeunload', function(e){
+  if(state.saving){
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  }
+});
 boot();
 </script>
 </body>
