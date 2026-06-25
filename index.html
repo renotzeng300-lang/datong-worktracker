@@ -283,9 +283,9 @@
 </script>
 <!-- ==================================================================== -->
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <div id="app"><div class="empty">載入中…</div></div>
 <div id="toast"></div>
@@ -1781,6 +1781,13 @@ function boot(){
   try{ granted = localStorage.getItem('dt-access-granted')==='1'; }catch(e){}
   if(granted){ startApp(); } else { renderAccessGate(); }
 }
+window.addEventListener('unhandledrejection', function(event){
+  try{
+    const reason = event.reason;
+    const msg = (reason && (reason.message || reason.code)) ? (reason.code? '['+reason.code+'] ':'')+(reason.message||'') : JSON.stringify(reason);
+    showToast('系統偵測到未處理的錯誤：'+msg, true);
+  }catch(e){}
+});
 window.addEventListener('beforeunload', function(e){
   if(state.saving){
     e.preventDefault();
