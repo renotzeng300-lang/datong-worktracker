@@ -1296,20 +1296,22 @@ function startApp(){
         let dataSettled = false;
         const dataTimeoutId = setTimeout(function(){
           if(!dataSettled){
-            document.getElementById('app').innerHTML = '<div class="empty">身分驗證成功，但資料庫連線逾時。<br><span class="small-note">這通常表示網路可以連到 Google 的登入服務，但「firestore.googleapis.com」這個雲端資料庫專用網域被防火牆／公司或機關網路擋住了。常見於機關內部網路。建議：①改用手機行動網路（關閉WiFi）測試是否能正常進入 ②請網管人員確認防火牆是否放行 firestore.googleapis.com 與 *.firebaseio.com。</span><br><button class="btn btn-sm" style="margin-top:10px;" onclick="location.reload()">重新整理頁面</button></div>';
+            document.getElementById('app').innerHTML = '<div class="empty">身分驗證成功，但資料庫連線逾時（已等待 20 秒）。<br><span class="small-note">請按 F12 開啟「Console」分頁，查看是否有紅色錯誤訊息（特別留意 code 後面的數字），並截圖回報以便進一步排查。也可以先按下方按鈕重新整理一次。</span><br><button class="btn btn-sm" style="margin-top:10px;" onclick="location.reload()">重新整理頁面</button></div>';
           }
-        }, 10000);
-        ensureSeedData().then(function(){
-          dataSettled = true;
-          clearTimeout(dataTimeoutId);
+        }, 20000);
+        try{
           attachListeners();
           loadCurrentUserFromDevice();
           render();
-        }).catch(function(err){
           dataSettled = true;
           clearTimeout(dataTimeoutId);
-          document.getElementById('app').innerHTML = '<div class="empty">資料初始化失敗：'+escapeHtml(err.message)+'</div>';
-        });
+        }catch(err){
+          dataSettled = true;
+          clearTimeout(dataTimeoutId);
+          document.getElementById('app').innerHTML = '<div class="empty">畫面初始化失敗：'+escapeHtml(err.message)+'</div>';
+        }
+        /* 種子資料（範例工作項目／人員清單／指標清單）在背景建立，不阻擋畫面顯示 */
+        ensureSeedData().catch(function(err){ showToast('初始種子資料建立失敗：'+err.message, true); });
       }else{
         authRef.signInAnonymously().catch(function(err){
           document.getElementById('app').innerHTML = '<div class="empty">連線失敗：'+escapeHtml(err.message)+'<br><span class="small-note">請確認 Firebase 設定金鑰是否正確，並已在 Authentication 啟用「匿名」登入方式。</span></div>';
