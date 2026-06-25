@@ -382,6 +382,78 @@ const INDICATORS = [
   {code:'7301', category:'other', title:'污物處理空間', isNew:true}
 ];
 
+/* ====================== 指標管理（主任可自行新增/編輯/停用，因應未來評鑑指標改版） ====================== */
+function effectiveIndicators(){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  const hidden = ov.hidden || [];
+  const edits = ov.edits || {};
+  const base = INDICATORS
+    .filter(function(ind){ return hidden.indexOf(ind.code)===-1; })
+    .map(function(ind){
+      const e = edits[ind.code];
+      return e ? Object.assign({}, ind, e) : ind;
+    });
+  const custom = (ov.custom || []).filter(function(ind){ return hidden.indexOf(ind.code)===-1; })
+    .map(function(ind){
+      const e = edits[ind.code];
+      return e ? Object.assign({}, ind, e) : ind;
+    });
+  return base.concat(custom);
+}
+function isCustomIndicator(code){
+  const ov = state.indicatorOverrides || {custom:[]};
+  return (ov.custom||[]).some(function(i){ return i.code===code; });
+}
+async function saveIndicatorOverrides(){
+  try{ await db.collection('app').doc('indicator-overrides').set(state.indicatorOverrides); }
+  catch(e){ showToast('指標設定儲存失敗：'+e.message, true); }
+}
+function addCustomIndicator(data){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  const code = (data.code||'').trim();
+  if(!code){ showToast('請填寫指標編號', true); return false; }
+  const exists = INDICATORS.some(function(i){return i.code===code;}) || (ov.custom||[]).some(function(i){return i.code===code;});
+  if(exists){ showToast('此指標編號已存在，請改用編輯功能或更換編號', true); return false; }
+  ov.custom = (ov.custom||[]).concat([{
+    code:code, category:data.category, title:data.title,
+    isCore: !!data.isCore, isNew: !!data.isNew, noScore: !!data.noScore
+  }]);
+  state.indicatorOverrides = ov;
+  saveIndicatorOverrides();
+  showToast('已新增指標項目');
+  return true;
+}
+function editIndicator(code, fields){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  ov.edits = ov.edits || {};
+  ov.edits[code] = fields;
+  state.indicatorOverrides = ov;
+  saveIndicatorOverrides();
+  showToast('已更新指標內容');
+}
+function hideIndicator(code){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  ov.hidden = (ov.hidden||[]).indexOf(code)===-1 ? (ov.hidden||[]).concat([code]) : ov.hidden;
+  state.indicatorOverrides = ov;
+  saveIndicatorOverrides();
+  showToast('已停用此指標');
+}
+function restoreIndicator(code){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  ov.hidden = (ov.hidden||[]).filter(function(c){ return c!==code; });
+  state.indicatorOverrides = ov;
+  saveIndicatorOverrides();
+  showToast('已恢復此指標');
+}
+function deleteCustomIndicator(code){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  ov.custom = (ov.custom||[]).filter(function(i){ return i.code!==code; });
+  if(ov.edits) delete ov.edits[code];
+  state.indicatorOverrides = ov;
+  saveIndicatorOverrides();
+  showToast('已刪除自訂指標');
+}
+
 function indicatorTags(ind){
   let html = '';
   if(ind.isCore) html += '<span class="tag-core">核心指標</span>';
@@ -402,8 +474,9 @@ function indicatorStatus(code){
   return c.status || (c.checked ? '已備妥' : '未備妥'); /* 相容舊資料：舊版只有 checked 布林值 */
 }
 function indicatorStats(){
+  const list = effectiveIndicators();
   let ready=0, notReady=0, na=0, withTask=0, coreTotal=0, coreNotReady=0;
-  INDICATORS.forEach(function(ind){
+  list.forEach(function(ind){
     const st = indicatorStatus(ind.code);
     if(st==='已備妥') ready++;
     else if(st==='不適評') na++;
@@ -414,8 +487,8 @@ function indicatorStats(){
       if(st!=='已備妥' && st!=='不適評') coreNotReady++;
     }
   });
-  const applicable = INDICATORS.length - na; /* 排除不適評後的適用指標總數 */
-  return {total:INDICATORS.length, applicable:applicable, ready:ready, notReady:notReady, na:na, withTask:withTask, coreTotal:coreTotal, coreNotReady:coreNotReady};
+  const applicable = list.length - na; /* 排除不適評後的適用指標總數 */
+  return {total:list.length, applicable:applicable, ready:ready, notReady:notReady, na:na, withTask:withTask, coreTotal:coreTotal, coreNotReady:coreNotReady};
 }
 function staffActivity(){
   /* 統計每位人員最後一次登打（任何工作項目的 log）距今天數，用於偵測久無動靜的同仁 */
@@ -516,6 +589,7 @@ const state = {
   tasks: [],
   roster: [],
   indicatorChecklist: {},
+  indicatorOverrides: {custom:[], hidden:[], edits:{}},
   indFilter: {category:'all', readiness:'all', core:false},
   activeTab: 'overview',
   filter: {category:'all', assignee:'all', status:'all'},
@@ -548,6 +622,10 @@ async function ensureSeedData(){
     const indDoc = await db.collection('app').doc('indicatorChecklist').get();
     if(!indDoc.exists){ await db.collection('app').doc('indicatorChecklist').set({}); }
   }catch(e){}
+  try{
+    const ovDoc = await db.collection('app').doc('indicator-overrides').get();
+    if(!ovDoc.exists){ await db.collection('app').doc('indicator-overrides').set({custom:[], hidden:[], edits:{}}); }
+  }catch(e){}
 }
 
 function attachListeners(){
@@ -565,6 +643,14 @@ function attachListeners(){
     state.indicatorChecklist = doc.exists ? (doc.data()||{}) : {};
     render();
   }, function(err){ showToast('指標對照表連線中斷', true); });
+
+  db.collection('app').doc('indicator-overrides').onSnapshot(function(doc){
+    state.indicatorOverrides = doc.exists ? (doc.data()||{custom:[],hidden:[],edits:{}}) : {custom:[],hidden:[],edits:{}};
+    if(!state.indicatorOverrides.custom) state.indicatorOverrides.custom=[];
+    if(!state.indicatorOverrides.hidden) state.indicatorOverrides.hidden=[];
+    if(!state.indicatorOverrides.edits) state.indicatorOverrides.edits={};
+    render();
+  }, function(err){ showToast('指標設定連線中斷', true); });
 }
 
 function loadCurrentUserFromDevice(){
@@ -810,6 +896,7 @@ function renderTabsAndBody(){
     + tabBtn('indicators','指標對照表');
   if(isDirector){
     tabsHtml += tabBtn('review','審核與提醒', reviewCount);
+    tabsHtml += tabBtn('indManage','指標管理');
   }
   tabsHtml += '</div>';
 
@@ -819,6 +906,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='all') body = renderTaskListPanel('all');
   else if(state.activeTab==='indicators') body = renderIndicatorPanel();
   else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
+  else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
 
   return '<div class="container">' + tabsHtml + body + '</div>';
 }
@@ -854,7 +942,7 @@ function renderOverview(){
     + '</div>';
 
   html += '<div class="panel" style="margin-bottom:18px;">'
-    + '  <div class="panel-pad" style="padding-bottom:4px;"><div class="section-title">指標準備度</div><div class="section-sub">對照「109評鑑指標」共'+INDICATORS.length+'項，詳細勾選請至「指標對照表」分頁</div></div>'
+    + '  <div class="panel-pad" style="padding-bottom:4px;"><div class="section-title">指標準備度</div><div class="section-sub">對照「109評鑑指標」共'+effectiveIndicators().length+'項，詳細勾選請至「指標對照表」分頁</div></div>'
     +     (ind.coreNotReady>0 ? '<div style="padding:0 20px;"><div class="core-warning" style="margin-bottom:14px;">⚠️ 核心指標尚有 '+ind.coreNotReady+' 項未達「已備妥」，將導致評鑑等第降一等</div></div>' : '')
     + '  <div class="stat-grid" style="padding:0 20px 18px; margin-bottom:0;">'
     +     statCard(ind.ready+'/'+ind.applicable,'資料已備妥（適用指標）','good')
@@ -1087,7 +1175,7 @@ function renderIndicatorPanel(){
   let anyGroup = false;
   CATEGORIES.forEach(function(cat){
     if(state.indFilter.category!=='all' && cat.id!==state.indFilter.category) return;
-    let items = INDICATORS.filter(function(ind){ return ind.category===cat.id; });
+    let items = effectiveIndicators().filter(function(ind){ return ind.category===cat.id; });
     if(state.indFilter.core) items = items.filter(function(ind){ return ind.isCore; });
     items = items.filter(function(ind){
       const st = indicatorStatus(ind.code);
@@ -1132,6 +1220,101 @@ function renderIndicatorPanel(){
   return html;
 }
 
+function renderIndicatorManagePanel(){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  const hidden = ov.hidden || [];
+  let html = '<div class="panel" style="margin-bottom:18px;">'
+    + '  <div class="panel-pad">'
+    + '    <div class="section-title">新增指標項目</div>'
+    + '    <div class="section-sub">未來評鑑指標改版（如第12次評鑑）時，可在此自行新增新的指標項目，不需修改程式碼</div>'
+    + '    <form id="add-indicator-form" style="margin-top:10px;">'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">指標編號</label><input class="full" type="text" name="code" placeholder="例如：8101" required></div>'
+    + '        <div class="field-block"><label class="field-label">評鑑面向</label><select class="full" name="category">'+CATEGORIES.map(function(c){ return '<option value="'+c.id+'">'+c.label+'</option>'; }).join('')+'</select></div>'
+    + '      </div>'
+    + '      <div class="field-block"><label class="field-label">指標名稱</label><input class="full" type="text" name="title" placeholder="例如：資訊安全管理機制" required></div>'
+    + '      <div class="row-2" style="gap:18px;">'
+    + '        <label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" name="isCore"> 核心指標</label>'
+    + '        <label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" name="isNew"> 新增指標</label>'
+    + '        <label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" name="noScore"> 不計分</label>'
+    + '      </div>'
+    + '      <button class="btn btn-primary btn-sm" type="submit" style="margin-top:8px;">新增指標</button>'
+    + '    </form>'
+    + '  </div>'
+    + '</div>';
+
+  html += '<div class="panel"><div class="panel-pad" style="padding-bottom:6px;">'
+    + '<div class="section-title">現有指標清單</div>'
+    + '<div class="section-sub">可編輯名稱／面向／標籤，或停用不再適用的舊指標（停用不會刪除歷史工作項目資料）</div>'
+    + '</div>'
+    + '<table class="ind-table"><thead><tr>'
+    + '<th style="width:90px;">編號</th><th>名稱</th><th style="width:110px;">面向</th><th style="width:160px;">標籤</th><th style="width:90px;">狀態</th><th style="width:160px;">操作</th>'
+    + '</tr></thead><tbody>'
+    +   INDICATORS.concat(ov.custom||[]).map(function(baseInd){
+          const e = (ov.edits||{})[baseInd.code];
+          const ind = e ? Object.assign({}, baseInd, e) : baseInd;
+          const isHidden = hidden.indexOf(ind.code)!==-1;
+          const isCustom = isCustomIndicator(ind.code);
+          return '<tr style="'+(isHidden?'opacity:.5;':'')+'">'
+            + '<td data-label="編號" class="ind-code">'+ind.code+(isCustom?' <span class="tag-new">自訂</span>':'')+'</td>'
+            + '<td data-label="名稱">'+escapeHtml(ind.title)+'</td>'
+            + '<td data-label="面向">'+catInfo(ind.category).label+'</td>'
+            + '<td data-label="標籤">'+(indicatorTags(ind)||'<span class="small-note">—</span>')+'</td>'
+            + '<td data-label="狀態">'+(isHidden?'已停用':'啟用中')+'</td>'
+            + '<td data-label="操作" style="display:flex; gap:6px; flex-wrap:wrap;">'
+            +   '<button class="btn btn-sm" data-action="ind-edit-open" data-code="'+ind.code+'">編輯</button>'
+            +   (isHidden
+                  ? '<button class="btn btn-sm" data-action="ind-restore" data-code="'+ind.code+'">恢復</button>'
+                  : '<button class="btn btn-sm btn-ghost" data-action="ind-hide" data-code="'+ind.code+'">停用</button>')
+            +   (isCustom ? '<button class="btn btn-sm btn-ghost" data-action="ind-delete-custom" data-code="'+ind.code+'">刪除</button>' : '')
+            + '</td>'
+            + '</tr>';
+        }).join('')
+    + '</tbody></table>'
+    + '</div>';
+  return html;
+}
+function showEditIndicatorModal(code){
+  const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
+  const baseInd = INDICATORS.concat(ov.custom||[]).find(function(i){ return i.code===code; });
+  if(!baseInd) return;
+  const e = (ov.edits||{})[code];
+  const ind = e ? Object.assign({}, baseInd, e) : baseInd;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'edit-indicator-overlay';
+  overlay.innerHTML = ''
+    + '<div class="modal">'
+    + '  <div class="modal-head"><h2>編輯指標：'+ind.code+'</h2></div>'
+    + '  <div class="modal-body">'
+    + '    <form id="edit-indicator-form">'
+    + '      <div class="field-block"><label class="field-label">評鑑面向</label><select class="full" name="category">'+CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(ind.category===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')+'</select></div>'
+    + '      <div class="field-block"><label class="field-label">指標名稱</label><input class="full" type="text" name="title" value="'+escapeHtml(ind.title)+'" required></div>'
+    + '      <div class="row-2" style="gap:18px;">'
+    + '        <label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" name="isCore" '+(ind.isCore?'checked':'')+'> 核心指標</label>'
+    + '        <label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" name="isNew" '+(ind.isNew?'checked':'')+'> 新增指標</label>'
+    + '        <label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" name="noScore" '+(ind.noScore?'checked':'')+'> 不計分</label>'
+    + '      </div>'
+    + '    </form>'
+    + '  </div>'
+    + '  <div class="modal-foot"><button class="btn" id="edit-indicator-cancel">取消</button><button class="btn btn-primary" id="edit-indicator-submit">儲存</button></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(ev){ if(ev.target===overlay){ overlay.remove(); } });
+  document.getElementById('edit-indicator-cancel').addEventListener('click', function(){ overlay.remove(); });
+  document.getElementById('edit-indicator-submit').addEventListener('click', function(){
+    const form = document.getElementById('edit-indicator-form');
+    if(!form.checkValidity()){ form.reportValidity(); return; }
+    const fd = new FormData(form);
+    editIndicator(code, {
+      category: fd.get('category'), title: fd.get('title'),
+      isCore: fd.get('isCore')==='on', isNew: fd.get('isNew')==='on', noScore: fd.get('noScore')==='on'
+    });
+    overlay.remove();
+    render();
+  });
+}
+
 
 function showNewTaskModal(presets){
   presets = presets || {};
@@ -1156,7 +1339,7 @@ function showNewTaskModal(presets){
     + '        <div class="field-block"><label class="field-label">對應評鑑面向</label><select class="full" name="category">'+CATEGORIES.map(function(c){ return '<option value="'+c.id+'"'+(v('category')===c.id?' selected':'')+'>'+c.label+'</option>'; }).join('')+'</select></div>'
     + '        <div class="field-block"><label class="field-label">對應指標編號（選填）</label><input class="full" type="text" name="indicator" value="'+escapeHtml(v('indicator'))+'" placeholder="例如：1102 機構管理制度" list="indicator-suggestions"></div>'
     + '      </div>'
-    + '      <datalist id="indicator-suggestions">'+INDICATORS.map(function(i){ return '<option value="'+i.code+' '+escapeHtml(i.title)+'">'; }).join('')+'</datalist>'
+    + '      <datalist id="indicator-suggestions">'+effectiveIndicators().map(function(i){ return '<option value="'+i.code+' '+escapeHtml(i.title)+'">'; }).join('')+'</datalist>'
     + '      <div class="row-2">'
     + '        <div class="field-block"><label class="field-label">負責人姓名</label><input class="full" type="text" name="assignee" list="roster-names-modal" value="'+escapeHtml(v('assignee', state.currentUser.name))+'" required></div>'
     + '        <div class="field-block"><label class="field-label">負責人角色</label><select class="full" name="role">'+ROLES.map(function(r){ return '<option value="'+r+'"'+(r===v('role', state.currentUser.role)?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></div>'
@@ -1256,7 +1439,7 @@ function exportReport(){
     const ws1 = XLSX.utils.json_to_sheet(taskRows.length?taskRows:[{'提示':'目前尚無工作項目'}]);
     XLSX.utils.book_append_sheet(wb, ws1, '工作項目清單');
 
-    const indRows = INDICATORS.map(function(ind){
+    const indRows = effectiveIndicators().map(function(ind){
       const c = state.indicatorChecklist[ind.code] || {};
       const linked = tasksForIndicator(ind.code);
       return {
@@ -1348,7 +1531,7 @@ function bindGlobalEvents(){
   document.querySelectorAll('[data-action="ind-new-task"]').forEach(function(btn){
     btn.addEventListener('click', function(){
       const code = btn.getAttribute('data-code');
-      const ind = INDICATORS.find(function(i){ return i.code===code; });
+      const ind = effectiveIndicators().find(function(i){ return i.code===code; });
       if(!ind) return;
       showNewTaskModal({category:ind.category, indicator: ind.code+' '+ind.title, title:''});
     });
@@ -1427,6 +1610,39 @@ function bindGlobalEvents(){
         deleteTask(btn.getAttribute('data-id'));
         showToast('已刪除工作項目');
         render();
+      }
+    });
+  });
+
+  const addIndForm = document.getElementById('add-indicator-form');
+  if(addIndForm){
+    addIndForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      const fd = new FormData(addIndForm);
+      const ok = addCustomIndicator({
+        code: fd.get('code'), category: fd.get('category'), title: fd.get('title'),
+        isCore: fd.get('isCore')==='on', isNew: fd.get('isNew')==='on', noScore: fd.get('noScore')==='on'
+      });
+      if(ok){ addIndForm.reset(); }
+    });
+  }
+  document.querySelectorAll('[data-action="ind-edit-open"]').forEach(function(btn){
+    btn.addEventListener('click', function(){ showEditIndicatorModal(btn.getAttribute('data-code')); });
+  });
+  document.querySelectorAll('[data-action="ind-hide"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(confirm('停用此指標後，「指標對照表」將不再顯示此項，但既有的工作項目資料不會被刪除。確定要停用嗎？')){
+        hideIndicator(btn.getAttribute('data-code'));
+      }
+    });
+  });
+  document.querySelectorAll('[data-action="ind-restore"]').forEach(function(btn){
+    btn.addEventListener('click', function(){ restoreIndicator(btn.getAttribute('data-code')); });
+  });
+  document.querySelectorAll('[data-action="ind-delete-custom"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(confirm('確定要永久刪除這個自訂指標項目嗎？此動作無法復原。')){
+        deleteCustomIndicator(btn.getAttribute('data-code'));
       }
     });
   });
