@@ -1386,6 +1386,9 @@ function showNewTaskModal(presets){
     submitBtn.disabled = true;
     submitBtn.textContent = '儲存中…請稍候，完成前請勿關閉或重新整理';
     state.saving = true;
+    const slowNoticeId = setTimeout(function(){
+      submitBtn.textContent = '仍在嘗試上傳…網路連線較慢，請耐心等候（請勿關閉視窗）';
+    }, 8000);
     const fd = new FormData(form);
     createTask({
       title: fd.get('title'), category: fd.get('category'), indicator: fd.get('indicator'),
@@ -1395,12 +1398,14 @@ function showNewTaskModal(presets){
       progress: fd.get('progress'), status: fd.get('status'),
       reminderDate: fd.get('reminderDate'), note: fd.get('note')
     }).then(function(){
+      clearTimeout(slowNoticeId);
       state.saving = false;
       try{ localStorage.removeItem('dt-new-task-draft'); }catch(e){}
       closeNewTaskModal();
       showToast('已新增工作項目（已確認儲存於雲端）');
       render();
     }).catch(function(err){
+      clearTimeout(slowNoticeId);
       state.saving = false;
       submitBtn.disabled = false;
       submitBtn.textContent = '新增';
@@ -1564,12 +1569,17 @@ function bindGlobalEvents(){
       const submitBtn = form.querySelector('button[type="submit"]');
       if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = '儲存中…請稍候'; }
       state.saving = true;
+      const slowNoticeId = setTimeout(function(){
+        if(submitBtn) submitBtn.textContent = '仍在嘗試上傳…網路連線較慢，請耐心等候';
+      }, 8000);
       addLog(id, fd.get('note'), fd.get('progress'), fd.get('status')).then(function(){
+        clearTimeout(slowNoticeId);
         state.saving = false;
         try{ localStorage.removeItem('dt-log-draft-'+id); }catch(err){}
         showToast('已更新執行進度（已確認儲存於雲端）');
         render();
       }).catch(function(err){
+        clearTimeout(slowNoticeId);
         state.saving = false;
         if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = '送出更新'; }
         showToast('更新失敗，請檢查網路後再試一次：'+err.message, true);
