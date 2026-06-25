@@ -1285,6 +1285,9 @@ function startApp(){
     firebase.initializeApp(FIREBASE_CONFIG);
     const authRef = firebase.auth();
     db = firebase.firestore();
+    try{
+      db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
+    }catch(e){ /* 若此 SDK 版本不支援該設定，略過即可，不影響其他功能 */ }
     authRef.onAuthStateChanged(function(user){
       settled = true;
       clearTimeout(timeoutId);
