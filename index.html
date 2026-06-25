@@ -1783,8 +1783,17 @@ function boot(){
 }
 window.addEventListener('unhandledrejection', function(event){
   try{
-    const reason = event.reason;
-    const msg = (reason && (reason.message || reason.code)) ? (reason.code? '['+reason.code+'] ':'')+(reason.message||'') : JSON.stringify(reason);
+    const reason = event.reason || {};
+    const reqInfo = reason.reqInfo;
+    /* 過濾掉瀏覽器擴充功能（如 AI 助手類擴充功能）自身呼叫失敗產生的雜訊，
+       這類錯誤的 reqInfo.pathPrefix 不會是 Firebase/Firestore 的路徑格式，
+       只在看起來像是 firebase 相關錯誤時才提示，避免誤導排查方向。 */
+    if(reqInfo && reqInfo.pathPrefix){ return; } /* 非 Firebase 格式，視為擴充功能雜訊，忽略 */
+    const looksFirebaseRelated = (reason.code && String(reason.code).indexOf('firestore')!==-1)
+      || (reason.name==='FirebaseError')
+      || (reason.message && /firestore|firebase/i.test(reason.message));
+    if(!looksFirebaseRelated) return;
+    const msg = (reason.message || reason.code) ? (reason.code? '['+reason.code+'] ':'')+(reason.message||'') : '未知錯誤';
     showToast('系統偵測到未處理的錯誤：'+msg, true);
   }catch(e){}
 });
