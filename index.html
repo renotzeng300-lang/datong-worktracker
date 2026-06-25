@@ -1289,11 +1289,22 @@ function startApp(){
       settled = true;
       clearTimeout(timeoutId);
       if(user){
+        document.getElementById('app').innerHTML = '<div class="empty">登入成功，正在連接資料庫…</div>';
+        let dataSettled = false;
+        const dataTimeoutId = setTimeout(function(){
+          if(!dataSettled){
+            document.getElementById('app').innerHTML = '<div class="empty">身分驗證成功，但資料庫連線逾時。<br><span class="small-note">這通常表示網路可以連到 Google 的登入服務，但「firestore.googleapis.com」這個雲端資料庫專用網域被防火牆／公司或機關網路擋住了。常見於機關內部網路。建議：①改用手機行動網路（關閉WiFi）測試是否能正常進入 ②請網管人員確認防火牆是否放行 firestore.googleapis.com 與 *.firebaseio.com。</span><br><button class="btn btn-sm" style="margin-top:10px;" onclick="location.reload()">重新整理頁面</button></div>';
+          }
+        }, 10000);
         ensureSeedData().then(function(){
+          dataSettled = true;
+          clearTimeout(dataTimeoutId);
           attachListeners();
           loadCurrentUserFromDevice();
           render();
         }).catch(function(err){
+          dataSettled = true;
+          clearTimeout(dataTimeoutId);
           document.getElementById('app').innerHTML = '<div class="empty">資料初始化失敗：'+escapeHtml(err.message)+'</div>';
         });
       }else{
