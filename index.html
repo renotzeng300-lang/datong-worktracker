@@ -645,6 +645,90 @@ function renderStaffBoard(){
   return html;
 }
 
+/* ====================== 每週彙總卡（彙整本週至今，誰更新了什麼、誰完全沒動靜） ====================== */
+function startOfThisWeek(){
+  const d = new Date(todayStr());
+  const day = d.getDay(); /* 0=週日 1=週一 ... 6=週六 */
+  const diffToMonday = (day===0 ? -6 : 1-day);
+  d.setDate(d.getDate()+diffToMonday);
+  return d.toISOString().slice(0,10);
+}
+function weeklyDigestData(){
+  const weekStart = startOfThisWeek();
+  const today = todayStr();
+  return state.roster.map(function(r){
+    const latestByTask = {};
+    state.tasks.forEach(function(t){
+      if(t.assignee !== r.name) return;
+      t.logs.forEach(function(l){
+        if(!l.date || l.date < weekStart || l.date > today) return;
+        const key = t.id;
+        if(!latestByTask[key] || l.date >= latestByTask[key].date){
+          latestByTask[key] = {date:l.date, title:t.title, note:l.note||'', progress:l.progress, status:l.status};
+        }
+      });
+    });
+    const entries = Object.keys(latestByTask).map(function(k){ return latestByTask[k]; }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+    const completedCount = entries.filter(function(e){ return e.status==='已完成'; }).length;
+    return {name:r.name, role:r.role, entries:entries, updateCount:entries.length, completedCount:completedCount};
+  }).sort(function(a,b){ return a.updateCount - b.updateCount; });
+}
+function renderWeeklyDigest(){
+  const weekStart = startOfThisWeek();
+  const today = todayStr();
+  const data = weeklyDigestData();
+  const activeCount = data.filter(function(d){ return d.updateCount>0; }).length;
+  const noUpdateCount = data.length - activeCount;
+  const completedThisWeek = data.reduce(function(sum,d){ return sum+d.completedCount; }, 0);
+
+  let html = '<div class="small-note" style="margin-bottom:14px;">彙整範圍：本週一（'+weekStart+'）至今天（'+today+'）。開週會／晨會前看這頁，誰更新了什麼、誰完全沒動靜，一目了然，不用再口頭一個個問。</div>';
+  html += '<div class="stat-grid">'
+    + statCard(activeCount,'本週有更新的同仁','good')
+    + statCard(noUpdateCount,'本週尚無任何更新','warn')
+    + statCard(completedThisWeek,'本週完成的工作項目','good')
+    + statCard(data.length,'人員總數','')
+    + '</div>';
+
+  if(data.length===0){
+    html += '<div class="panel"><div class="empty">尚未設定任何人員，請先到「人員帳號管理」分頁新增同仁。</div></div>';
+    return html;
+  }
+
+  html += '<div class="staff-board-grid">';
+  html += data.map(function(s){
+    const initial = (s.name||'？').slice(0,1);
+    const hasUpdate = s.updateCount>0;
+    const badgeBg = hasUpdate ? '#DCEEDD' : '#F5E4D7';
+    const badgeFg = hasUpdate ? '#2C6B3A' : '#9C4A1F';
+    const badgeText = hasUpdate ? ('本週更新 '+s.updateCount+' 項') : '本週尚無更新';
+    let entriesHtml;
+    if(!hasUpdate){
+      entriesHtml = '<div class="small-note">本週尚未看到這位同仁登打任何進度，建議主動關心一下。</div>';
+    }else{
+      entriesHtml = s.entries.slice(0,5).map(function(e){
+        return '<div class="sb-task">'
+          + '<div class="sb-task-top"><span class="sb-task-title">'+(e.status==='已完成'?'✅ ':'')+escapeHtml(e.title)+'</span><span class="sb-task-pct">'+(e.progress||0)+'%</span></div>'
+          + '<div class="small-note" style="margin-top:-2px;">'+escapeHtml(e.date)+' · '+escapeHtml(e.note||e.status||'')+'</div>'
+          + '</div>';
+      }).join('');
+      if(s.entries.length>5){
+        entriesHtml += '<div class="small-note">還有 '+(s.entries.length-5)+' 項更新，請至「全部工作」查看完整紀錄</div>';
+      }
+    }
+    return '<div class="panel sb-card">'
+      + '  <div class="panel-pad">'
+      + '    <div class="sb-head">'
+      + '      <div class="sb-who"><div class="sb-avatar">'+escapeHtml(initial)+'</div><div><div class="sb-name">'+escapeHtml(s.name)+'</div><div class="sb-role">'+escapeHtml(s.role)+'</div></div></div>'
+      + '      <span class="status-badge" style="background:'+badgeBg+'; color:'+badgeFg+'">'+badgeText+'</span>'
+      + '    </div>'
+      + entriesHtml
+      + '  </div>'
+      + '</div>';
+  }).join('');
+  html += '</div>';
+  return html;
+}
+
 function catInfo(id){ return CATEGORIES.find(function(c){return c.id===id;}) || CATEGORIES[CATEGORIES.length-1]; }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -1102,6 +1186,7 @@ function renderTabsAndBody(){
     + tabBtn('indicators','指標對照表');
   if(isDirector){
     tabsHtml += tabBtn('staffBoard','同仁總覽');
+    tabsHtml += tabBtn('weeklyDigest','每週彙總');
     tabsHtml += tabBtn('review','審核與提醒', reviewCount);
     tabsHtml += tabBtn('indManage','指標管理');
     tabsHtml += tabBtn('staffManage','人員帳號管理');
@@ -1114,6 +1199,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='all') body = renderTaskListPanel('all');
   else if(state.activeTab==='indicators') body = renderIndicatorPanel();
   else if(state.activeTab==='staffBoard' && isDirector) body = renderStaffBoard();
+  else if(state.activeTab==='weeklyDigest' && isDirector) body = renderWeeklyDigest();
   else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
   else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
   else if(state.activeTab==='staffManage' && isDirector) body = renderStaffManagePanel();
