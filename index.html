@@ -864,7 +864,8 @@ const state = {
   activeTab: 'overview',
   filter: {category:'all', assignee:'all', status:'all'},
   openTaskId: null,
-  editingLogKey: null,  // 格式 "taskId#index"，用於記錄目前正在編輯哪一筆登打紀錄
+  editingLogKey: null,
+  deletedTasks: [],  // 格式 "taskId#index"，用於記錄目前正在編輯哪一筆登打紀錄
   modal: null,      // null | 'newTask'
   saving: false
 };
@@ -900,7 +901,9 @@ async function ensureSeedData(){
 
 function attachListeners(){
   db.collection('tasks').onSnapshot(function(snap){
-    state.tasks = snap.docs.map(function(d){ return d.data(); });
+    const all = snap.docs.map(function(d){ return d.data(); });
+    state.tasks = all.filter(function(t){ return !t.deleted; });
+    state.deletedTasks = all.filter(function(t){ return t.deleted; });
     render();
   }, function(err){ showToast('工作清單連線中斷：'+err.message, true); });
 
@@ -1130,8 +1133,26 @@ function setPriority(taskId, priority){
     .catch(function(err){ showToast('更新失敗：'+err.message, true); });
 }
 function deleteTask(taskId){
+  db.collection('tasks').doc(taskId).update({
+    deleted: true,
+    deletedAt: todayStr(),
+    deletedBy: state.currentUser ? state.currentUser.name : '未知'
+  })
+    .then(function(){ showToast('已移至資源回收桶，如有需要可在「資源回收桶」分頁復原'); })
+    .catch(function(err){ showToast('刪除失敗：'+err.message, true); });
+}
+function restoreTask(taskId){
+  db.collection('tasks').doc(taskId).update({
+    deleted: false,
+    deletedAt: firebase.firestore.FieldValue.delete(),
+    deletedBy: firebase.firestore.FieldValue.delete()
+  })
+    .then(function(){ showToast('已從資源回收桶復原'); })
+    .catch(function(err){ showToast('復原失敗：'+err.message, true); });
+}
+function permanentlyDeleteTask(taskId){
   db.collection('tasks').doc(taskId).delete()
-    .then(function(){ showToast('已刪除工作項目'); })
+    .then(function(){ showToast('已永久刪除，此動作無法復原'); })
     .catch(function(err){ showToast('刪除失敗：'+err.message, true); });
 }
 
@@ -1304,6 +1325,7 @@ function renderTabsAndBody(){
     tabsHtml += tabBtn('review','審核與提醒', reviewCount);
     tabsHtml += tabBtn('indManage','指標管理');
     tabsHtml += tabBtn('staffManage','人員帳號管理');
+    tabsHtml += tabBtn('trash','資源回收桶', (state.deletedTasks||[]).length || null);
   }
   tabsHtml += '</div>';
 
@@ -1317,6 +1339,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
   else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
   else if(state.activeTab==='staffManage' && isDirector) body = renderStaffManagePanel();
+  else if(state.activeTab==='trash' && isDirector) body = renderTrashPanel();
 
   return '<div class="container">' + renderSelfReminderBanner() + tabsHtml + body + '</div>';
 }
@@ -1801,6 +1824,31 @@ function renderStaffManagePanel(){
   return html;
 }
 
+function renderTrashPanel(){
+  const list = (state.deletedTasks||[]).slice().sort(function(a,b){ return (b.deletedAt||'').localeCompare(a.deletedAt||''); });
+  let html = '<div class="small-note" style="margin-bottom:14px;">刪除工作項目時，會先移到這裡，不會立刻消失。確認真的不需要了，再從這裡「永久刪除」。</div>';
+  if(list.length===0){
+    html += '<div class="panel"><div class="empty">資源回收桶目前是空的。</div></div>';
+    return html;
+  }
+  html += list.map(function(t){
+    return '<div class="panel" style="margin-bottom:12px;">'
+      + '  <div class="panel-pad" style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">'
+      + '    <div>'
+      + '      <div style="font-weight:700; margin-bottom:4px;">'+escapeHtml(t.title)+'</div>'
+      + '      <div class="small-note">負責人：'+escapeHtml(t.assignee||'')+' ／ 進度 '+(t.progress||0)+'% ／ 狀態 '+escapeHtml(t.status||'')+'</div>'
+      + '      <div class="small-note">由「'+escapeHtml(t.deletedBy||'未知')+'」於 '+escapeHtml(t.deletedAt||'')+' 刪除</div>'
+      + '    </div>'
+      + '    <div style="display:flex; gap:8px; flex:none;">'
+      + '      <button class="btn btn-sm btn-primary" data-action="restore-task" data-id="'+t.id+'">↩️ 復原</button>'
+      + '      <button class="btn btn-sm btn-warn" data-action="permadelete-task" data-id="'+t.id+'">永久刪除</button>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>';
+  }).join('');
+  return html;
+}
+
 function showReassignBeforeRemoveModal(email, personName, tasks){
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -2220,10 +2268,21 @@ function bindGlobalEvents(){
 
   document.querySelectorAll('[data-action="delete-task"]').forEach(function(btn){
     btn.addEventListener('click', function(){
-      if(confirm('確定要刪除此工作項目嗎？此動作無法復原。')){
+      if(confirm('確定要刪除此工作項目嗎？（會先移至「資源回收桶」，之後還能找回來，不會立刻永久消失）')){
         deleteTask(btn.getAttribute('data-id'));
-        showToast('已刪除工作項目');
-        render();
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-action="restore-task"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      restoreTask(btn.getAttribute('data-id'));
+    });
+  });
+  document.querySelectorAll('[data-action="permadelete-task"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(confirm('確定要永久刪除這個工作項目嗎？永久刪除後將無法復原，所有歷史登打紀錄也會一併消失。')){
+        permanentlyDeleteTask(btn.getAttribute('data-id'));
       }
     });
   });
