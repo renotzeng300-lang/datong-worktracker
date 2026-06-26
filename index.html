@@ -565,6 +565,47 @@ function staffBadge(days){
   if(days<=6) return {bg:'#FCEFD9', fg:'#9C6B1F', text:days+' 天前更新'};
   return {bg:'#F5E4D7', fg:'#9C4A1F', text:days+' 天前更新'};
 }
+
+/* ====================== 同仁自我提醒（登入時提醒自己手上太久沒更新的工作） ====================== */
+function taskLastUpdateDays(t){
+  if(!t.logs || t.logs.length===0) return null;
+  let maxDate = t.logs[0].date;
+  t.logs.forEach(function(l){ if(l.date && l.date>maxDate) maxDate = l.date; });
+  return Math.round((new Date(todayStr()) - new Date(maxDate)) / 86400000);
+}
+function staleOwnTasks(thresholdDays){
+  if(!state.currentUser) return [];
+  return state.tasks.filter(function(t){
+    if(t.assignee !== state.currentUser.name) return false;
+    if(t.status==='已完成') return false;
+    const days = taskLastUpdateDays(t);
+    return days===null || days>=thresholdDays;
+  });
+}
+function selfReminderDismissKey(){ return 'selfReminderDismiss_'+(state.currentUser?state.currentUser.email:'')+'_'+todayStr(); }
+function renderSelfReminderBanner(){
+  let dismissed = false;
+  try{ dismissed = localStorage.getItem(selfReminderDismissKey())==='1'; }catch(e){}
+  if(dismissed) return '';
+  const stale = staleOwnTasks(3);
+  if(stale.length===0) return '';
+  const shown = stale.slice(0,4).map(function(t){
+    const days = taskLastUpdateDays(t);
+    return '<li>'+escapeHtml(t.title)+'<span class="small-note">（'+(days===null?'尚無登打紀錄':days+' 天前更新')+'）</span></li>';
+  }).join('');
+  const more = stale.length>4 ? '<div class="small-note" style="margin-top:4px;">還有 '+(stale.length-4)+' 項，請至「我的工作」分頁查看</div>' : '';
+  return '<div class="panel" style="margin-bottom:16px; border-color:#F0C9A0;">'
+    + '  <div class="panel-pad" style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">'
+    + '    <div style="flex:1; min-width:200px;">'
+    + '      <div style="font-weight:700; color:var(--warn); margin-bottom:6px;">🔔 你有 '+stale.length+' 項工作好幾天沒更新進度了，記得回報一下：</div>'
+    + '      <ul style="margin:0; padding-left:18px; font-size:13px; color:var(--ink-soft);">'+shown+'</ul>'
+    +       more
+    + '    </div>'
+    + '    <button class="btn btn-sm btn-ghost" data-action="dismiss-self-reminder">今天先不要提醒</button>'
+    + '  </div>'
+    + '</div>';
+}
+
 function renderStaffBoard(){
   const data = staffBoardData();
   if(data.length===0){
@@ -1077,7 +1118,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
   else if(state.activeTab==='staffManage' && isDirector) body = renderStaffManagePanel();
 
-  return '<div class="container">' + tabsHtml + body + '</div>';
+  return '<div class="container">' + renderSelfReminderBanner() + tabsHtml + body + '</div>';
 }
 function tabBtn(id,label,count){
   const cls = 'tab' + (state.activeTab===id?' active':'');
@@ -1277,14 +1318,14 @@ function renderTaskCard(t){
 
 function renderReviewPanel(){
   let html = '<div class="panel" style="margin-bottom:18px;">'
-    + '  <div class="panel-pad" style="padding-bottom:6px;"><div class="section-title">人員活躍度</div><div class="section-sub">依「最近一次登打紀錄」排序，太久沒有任何更新的同仁會以紅色標示，方便您主動關心進度</div></div>'
+    + '  <div class="panel-pad" style="padding-bottom:6px;"><div class="section-title">人員活躍度</div><div class="section-sub">依「最近一次登打紀錄」排序。綠色＝近期有更新／黃色＝3-6天沒動靜／橘紅＝7天以上沒更新或尚無紀錄</div></div>'
     + '  <div class="panel-pad" style="padding-top:0;">'
     +     staffActivity().map(function(s){
+            const badge = staffBadge(s.days);
             const idleText = s.last ? (s.days+' 天前（'+s.last+'）') : '尚無任何登打紀錄';
-            const stale = s.days===null || s.days>=14;
             return '<div class="activity-row">'
               + '<span>'+escapeHtml(s.name)+'（'+escapeHtml(s.role)+'）</span>'
-              + '<span class="'+(stale?'activity-stale':'')+'">'+idleText+'</span>'
+              + '<span class="status-badge" style="background:'+badge.bg+'; color:'+badge.fg+'">'+idleText+'</span>'
               + '</div>';
           }).join('')
     + '  </div>'
@@ -1702,6 +1743,12 @@ function bindGlobalEvents(){
   const logoutBtn = document.querySelector('[data-action="logout"]');
   if(logoutBtn) logoutBtn.addEventListener('click', function(){
     firebase.auth().signOut().then(function(){ location.reload(); });
+  });
+
+  const dismissReminderBtn = document.querySelector('[data-action="dismiss-self-reminder"]');
+  if(dismissReminderBtn) dismissReminderBtn.addEventListener('click', function(){
+    try{ localStorage.setItem(selfReminderDismissKey(), '1'); }catch(e){}
+    render();
   });
 
   const catSel = document.querySelector('[data-action="filter-category"]');
