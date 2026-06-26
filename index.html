@@ -267,8 +267,9 @@
 <body>
 <!-- ====================================================================
   設定區塊：請依「Firebase設定教學.md」申請好 Firebase 專案後，
-  把下面 FIREBASE_CONFIG 換成您自己專案的金鑰，並自訂 ACCESS_CODE 通行碼。
-  完成後存檔、重新整理頁面即可開始使用。
+  把下面 FIREBASE_CONFIG 換成您自己專案的金鑰。
+  登入改用真實 Email/密碼帳號（請在 Firebase Console → Authentication 建立），
+  不再需要通行碼。完成後存檔、重新整理頁面即可開始使用。
 ==================================================================== -->
 <script>
   const FIREBASE_CONFIG = {
@@ -279,7 +280,6 @@
     messagingSenderId: "1012206857084",
     appId: "1:1012206857084:web:95ab07233d9adede0812f9"
   };
-  const ACCESS_CODE = "77126822";
 </script>
 <!-- ==================================================================== -->
 
@@ -585,7 +585,9 @@ function defaultRoster(){
 
 /* ====================== 全域狀態 ====================== */
 const state = {
-  currentUser: null,
+  firebaseUser: null,   // 真正登入的 Firebase Auth 帳號 {email, uid}
+  staffDirectory: {},   // email -> {name, role}，由主任在「人員帳號管理」設定
+  currentUser: null,    // 由 firebaseUser + staffDirectory 對照得出
   tasks: [],
   roster: [],
   indicatorChecklist: {},
@@ -594,8 +596,7 @@ const state = {
   activeTab: 'overview',
   filter: {category:'all', assignee:'all', status:'all'},
   openTaskId: null,
-  modal: null,      // null | 'identity' | 'newTask'
-  identityPick: null,
+  modal: null,      // null | 'newTask'
   saving: false
 };
 
@@ -651,19 +652,13 @@ function attachListeners(){
     if(!state.indicatorOverrides.edits) state.indicatorOverrides.edits={};
     render();
   }, function(err){ showToast('指標設定連線中斷', true); });
-}
 
-function loadCurrentUserFromDevice(){
-  try{
-    const raw = localStorage.getItem('dt-current-user');
-    state.currentUser = raw ? JSON.parse(raw) : null;
-  }catch(e){ state.currentUser = null; }
-}
-function saveCurrentUserToDevice(){
-  try{
-    if(state.currentUser){ localStorage.setItem('dt-current-user', JSON.stringify(state.currentUser)); }
-    else{ localStorage.removeItem('dt-current-user'); }
-  }catch(e){ /* 裝置儲存空間異常時略過，僅影響「記住身分」功能 */ }
+  db.collection('staff').onSnapshot(function(snap){
+    const dir = {};
+    snap.docs.forEach(function(d){ dir[d.id] = d.data(); });
+    state.staffDirectory = dir;
+    render();
+  }, function(err){ showToast('人員帳號清單連線中斷：'+err.message, true); });
 }
 
 function showToast(msg, isWarn){
@@ -681,6 +676,21 @@ function addToRoster(name, role){
     const newList = state.roster.concat([{name:name, role:role||'教保員'}]);
     db.collection('app').doc('roster').set({list:newList}).catch(function(){ showToast('人員清單更新失敗', true); });
   }
+}
+
+/* ====================== 人員帳號管理（將登入帳號 email 對應到姓名／角色） ====================== */
+function normalizeEmail(email){ return (email||'').trim().toLowerCase(); }
+function setStaffAccount(email, name, role){
+  const e = normalizeEmail(email);
+  if(!e || !name){ showToast('請填寫完整的 Email 與姓名', true); return Promise.reject(new Error('缺少必填欄位')); }
+  addToRoster(name, role);
+  return db.collection('staff').doc(e).set({name:name, role:role});
+}
+function removeStaffAccount(email){
+  const e = normalizeEmail(email);
+  return db.collection('staff').doc(e).delete()
+    .then(function(){ showToast('已移除此帳號的人員設定'); })
+    .catch(function(err){ showToast('移除失敗：'+err.message, true); });
 }
 
 /* ====================== 衍生計算 ====================== */
@@ -802,11 +812,32 @@ function deleteTask(taskId){
 /* ====================== 渲染 ====================== */
 function render(){
   const app = document.getElementById('app');
-  if(!state.currentUser){
-    app.innerHTML = renderIdentityScreen();
-    bindIdentityScreen();
+
+  if(!state.firebaseUser){
+    app.innerHTML = renderLoginScreen();
+    bindLoginScreen();
     return;
   }
+
+  const profile = state.staffDirectory[normalizeEmail(state.firebaseUser.email)];
+  if(profile){
+    state.currentUser = {name: profile.name, role: profile.role, email: state.firebaseUser.email};
+  }else{
+    state.currentUser = null;
+  }
+
+  if(!state.currentUser){
+    const directoryEmpty = Object.keys(state.staffDirectory).length===0;
+    if(directoryEmpty){
+      app.innerHTML = renderBootstrapScreen();
+      bindBootstrapScreen();
+    }else{
+      app.innerHTML = renderNoProfileScreen();
+      bindNoProfileScreen();
+    }
+    return;
+  }
+
   app.innerHTML = renderHeader() + renderTabsAndBody();
   bindGlobalEvents();
   /* 注意：「新增工作」視窗是獨立附加在 <body> 上的浮層，
@@ -815,52 +846,99 @@ function render(){
      否則背景的即時資料同步會把使用者正在填寫的內容整個換成空白新視窗。 */
 }
 
-function renderIdentityScreen(){
+function renderLoginScreen(){
   return ''
   + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
-  + '  <div class="modal" style="max-width:480px;">'
-  + '    <div class="modal-head">'
-  + '      <h2>歡迎使用大同發展中心工作管理平台</h2>'
-  + '      <p>請先選擇您的身分，以便系統記錄工作項目的執行與批改紀錄。</p>'
-  + '    </div>'
+  + '  <div class="modal" style="max-width:420px;">'
+  + '    <div class="modal-head"><h2>大同發展中心工作管理平台</h2><p>請使用機構配發的帳號登入</p></div>'
   + '    <div class="modal-body">'
-  + '      <div class="field-block">'
-  + '        <label class="field-label">您的姓名</label>'
-  + '        <input class="full" type="text" id="id-name" placeholder="例如：林組長" list="roster-names">'
-  + '        <datalist id="roster-names">' + state.roster.map(function(r){ return '<option value="'+escapeHtml(r.name)+'">'; }).join('') + '</datalist>'
-  + '      </div>'
-  + '      <div class="field-block">'
-  + '        <label class="field-label">您的角色</label>'
-  + '        <div class="id-options" id="id-roles">'
-  +            ROLES.map(function(r){ return '<div class="id-opt" data-role="'+r+'">'+r+'</div>'; }).join('')
-  + '        </div>'
-  + '      </div>'
-  + '      <div class="small-note">資料將儲存在機構共用的工作清單中，所有同仁登入後皆可查看「全部工作」，請以真實姓名登入以便主任進行批改與提醒。</div>'
+  + '      <div class="field-block"><label class="field-label">Email</label><input class="full" type="email" id="login-email" placeholder="例如：staff01@gmail.com" autocomplete="username"></div>'
+  + '      <div class="field-block"><label class="field-label">密碼</label><input class="full" type="password" id="login-password" placeholder="請輸入密碼" autocomplete="current-password"></div>'
+  + '      <div class="small-note" id="login-error" style="color:var(--warn); margin-top:4px;"></div>'
+  + '      <div class="small-note" style="margin-top:10px;"><a href="#" id="forgot-password-link">忘記密碼？</a></div>'
   + '    </div>'
-  + '    <div class="modal-foot">'
-  + '      <button class="btn btn-primary" id="id-submit">進入系統</button>'
-  + '    </div>'
+  + '    <div class="modal-foot"><button class="btn btn-primary" id="login-submit">登入</button></div>'
   + '  </div>'
   + '</div>';
 }
-function bindIdentityScreen(){
-  const roleBoxes = document.querySelectorAll('#id-roles .id-opt');
-  roleBoxes.forEach(function(el){
-    el.addEventListener('click', function(){
-      roleBoxes.forEach(function(b){ b.classList.remove('sel'); });
-      el.classList.add('sel');
-      state.identityPick = el.getAttribute('data-role');
+const FIREBASE_AUTH_ERROR_MAP = {
+  'auth/invalid-email':'Email 格式不正確',
+  'auth/user-disabled':'此帳號已被停用',
+  'auth/user-not-found':'帳號或密碼錯誤',
+  'auth/wrong-password':'帳號或密碼錯誤',
+  'auth/invalid-credential':'帳號或密碼錯誤',
+  'auth/too-many-requests':'嘗試次數過多，請稍後再試',
+  'auth/network-request-failed':'網路連線異常，請檢查網路後再試一次'
+};
+function translateAuthError(err){
+  return FIREBASE_AUTH_ERROR_MAP[err.code] || ('登入失敗：'+err.message);
+}
+function bindLoginScreen(){
+  function doLogin(){
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    if(!email || !password){ errEl.textContent = '請輸入 Email 與密碼'; return; }
+    const submitBtn = document.getElementById('login-submit');
+    submitBtn.disabled = true; submitBtn.textContent = '登入中…';
+    firebase.auth().signInWithEmailAndPassword(email, password).catch(function(err){
+      submitBtn.disabled = false; submitBtn.textContent = '登入';
+      errEl.textContent = translateAuthError(err);
+    });
+  }
+  document.getElementById('login-submit').addEventListener('click', doLogin);
+  document.getElementById('login-password').addEventListener('keydown', function(e){ if(e.key==='Enter'){ doLogin(); } });
+  document.getElementById('forgot-password-link').addEventListener('click', function(e){
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    if(!email){ document.getElementById('login-error').textContent = '請先在上方輸入您的 Email，再點忘記密碼'; return; }
+    firebase.auth().sendPasswordResetEmail(email).then(function(){
+      showToast('重設密碼信已寄出，請查收信箱');
+    }).catch(function(err){
+      document.getElementById('login-error').textContent = translateAuthError(err);
     });
   });
-  document.getElementById('id-submit').addEventListener('click', function(){
-    const name = document.getElementById('id-name').value.trim();
+}
+
+function renderBootstrapScreen(){
+  return ''
+  + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
+  + '  <div class="modal" style="max-width:480px;">'
+  + '    <div class="modal-head"><h2>首次設定：建立您的人員資料</h2><p>系統偵測到目前尚未設定任何人員帳號，請先設定您自己的姓名與角色（通常是主任），之後您可以在「人員帳號管理」分頁陸續新增其他同仁的帳號。</p></div>'
+  + '    <div class="modal-body">'
+  + '      <div class="small-note" style="margin-bottom:10px;">登入帳號：'+escapeHtml(state.firebaseUser.email)+'</div>'
+  + '      <div class="field-block"><label class="field-label">您的姓名</label><input class="full" type="text" id="bootstrap-name" placeholder="例如：陳主任"></div>'
+  + '      <div class="field-block"><label class="field-label">您的角色</label><select class="full" id="bootstrap-role">'+ROLES.map(function(r){ return '<option value="'+r+'"'+(r==='主任'?' selected':'')+'>'+r+'</option>'; }).join('')+'</select></div>'
+  + '    </div>'
+  + '    <div class="modal-foot"><button class="btn btn-primary" id="bootstrap-submit">建立並進入系統</button></div>'
+  + '  </div>'
+  + '</div>';
+}
+function bindBootstrapScreen(){
+  document.getElementById('bootstrap-submit').addEventListener('click', function(){
+    const name = document.getElementById('bootstrap-name').value.trim();
+    const role = document.getElementById('bootstrap-role').value;
     if(!name){ showToast('請輸入姓名', true); return; }
-    if(!state.identityPick){ showToast('請選擇角色', true); return; }
-    state.currentUser = {name:name, role:state.identityPick};
-    addToRoster(name, state.identityPick);
-    saveCurrentUserToDevice();
-    state.identityPick = null;
-    render();
+    setStaffAccount(state.firebaseUser.email, name, role).catch(function(err){
+      showToast('建立失敗：'+err.message, true);
+    });
+  });
+}
+
+function renderNoProfileScreen(){
+  return ''
+  + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
+  + '  <div class="modal" style="max-width:440px;">'
+  + '    <div class="modal-head"><h2>帳號尚未指派身份</h2>'
+  + '    <p>您的帳號（'+escapeHtml(state.firebaseUser.email)+'）已成功登入，但尚未被設定對應的姓名與角色。請聯絡主任，在「人員帳號管理」分頁為您的帳號設定身份後，重新整理此頁面即可。</p></div>'
+  + '    <div class="modal-foot"><button class="btn" id="no-profile-logout">登出</button></div>'
+  + '  </div>'
+  + '</div>';
+}
+function bindNoProfileScreen(){
+  document.getElementById('no-profile-logout').addEventListener('click', function(){
+    firebase.auth().signOut().then(function(){ location.reload(); });
   });
 }
 
@@ -875,9 +953,9 @@ function renderHeader(){
   + '  <div class="header-actions">'
   + '    <button class="export-btn" id="export-report-btn">📤 匯出報表</button>'
   + '    <div class="user-chip">'
-  + '      <span>👤 <b>'+escapeHtml(u.name)+'</b></span>'
+  + '      <span>👤 <b>'+escapeHtml(u.name)+'</b> <span style="opacity:.75;font-size:11px;">('+escapeHtml(u.email||'')+')</span></span>'
   + '      <span class="role-tag">'+escapeHtml(u.role)+'</span>'
-  + '      <button data-action="switch-user">切換使用者</button>'
+  + '      <button data-action="logout">登出</button>'
   + '    </div>'
   + '  </div>'
   + '</div>';
@@ -897,6 +975,7 @@ function renderTabsAndBody(){
   if(isDirector){
     tabsHtml += tabBtn('review','審核與提醒', reviewCount);
     tabsHtml += tabBtn('indManage','指標管理');
+    tabsHtml += tabBtn('staffManage','人員帳號管理');
   }
   tabsHtml += '</div>';
 
@@ -907,6 +986,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='indicators') body = renderIndicatorPanel();
   else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
   else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
+  else if(state.activeTab==='staffManage' && isDirector) body = renderStaffManagePanel();
 
   return '<div class="container">' + tabsHtml + body + '</div>';
 }
@@ -1316,6 +1396,45 @@ function showEditIndicatorModal(code){
 }
 
 
+function renderStaffManagePanel(){
+  const entries = Object.keys(state.staffDirectory).map(function(email){
+    return Object.assign({email:email}, state.staffDirectory[email]);
+  }).sort(function(a,b){ return a.email.localeCompare(b.email); });
+
+  let html = '<div class="panel" style="margin-bottom:18px;">'
+    + '  <div class="panel-pad">'
+    + '    <div class="section-title">新增 / 更新人員帳號設定</div>'
+    + '    <div class="section-sub">把已在 Firebase Authentication 建立好的登入 Email，對應到姓名與角色。<b>請注意：這裡只設定「姓名與角色對照」，實際的登入帳號密碼仍需先到 Firebase Console → Authentication → Users 手動新增。</b></div>'
+    + '    <form id="add-staff-form" style="margin-top:10px;">'
+    + '      <div class="row-2">'
+    + '        <div class="field-block"><label class="field-label">登入 Email</label><input class="full" type="email" name="email" placeholder="例如：staff01@gmail.com" required></div>'
+    + '        <div class="field-block"><label class="field-label">角色</label><select class="full" name="role">'+ROLES.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('')+'</select></div>'
+    + '      </div>'
+    + '      <div class="field-block"><label class="field-label">姓名</label><input class="full" type="text" name="name" placeholder="例如：林組長" required></div>'
+    + '      <button class="btn btn-primary btn-sm" type="submit" style="margin-top:4px;">儲存</button>'
+    + '    </form>'
+    + '  </div>'
+    + '</div>';
+
+  html += '<div class="panel"><div class="panel-pad" style="padding-bottom:6px;">'
+    + '<div class="section-title">目前已設定的人員帳號（共 '+entries.length+' 筆）</div>'
+    + '</div>'
+    + '<table class="ind-table"><thead><tr>'
+    + '<th>Email</th><th style="width:140px;">姓名</th><th style="width:110px;">角色</th><th style="width:90px;">操作</th>'
+    + '</tr></thead><tbody>'
+    +   (entries.length? entries.map(function(e){
+          return '<tr>'
+            + '<td data-label="Email">'+escapeHtml(e.email)+(e.email===normalizeEmail(state.firebaseUser.email)?' <span class="tag-core">您本人</span>':'')+'</td>'
+            + '<td data-label="姓名">'+escapeHtml(e.name)+'</td>'
+            + '<td data-label="角色">'+escapeHtml(e.role)+'</td>'
+            + '<td data-label="操作"><button class="btn btn-sm btn-ghost" data-action="staff-remove" data-email="'+escapeHtml(e.email)+'">移除</button></td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="4"><span class="small-note">尚未設定任何人員帳號。</span></td></tr>')
+    + '</tbody></table>'
+    + '</div>';
+  return html;
+}
+
 function showNewTaskModal(presets){
   presets = presets || {};
   let draft = null;
@@ -1491,8 +1610,10 @@ function bindGlobalEvents(){
   document.querySelectorAll('[data-action="tab"]').forEach(function(el){
     el.addEventListener('click', function(){ state.activeTab = el.getAttribute('data-tab'); state.openTaskId=null; render(); });
   });
-  const switchBtn = document.querySelector('[data-action="switch-user"]');
-  if(switchBtn) switchBtn.addEventListener('click', function(){ state.currentUser=null; saveCurrentUserToDevice(); render(); });
+  const logoutBtn = document.querySelector('[data-action="logout"]');
+  if(logoutBtn) logoutBtn.addEventListener('click', function(){
+    firebase.auth().signOut().then(function(){ location.reload(); });
+  });
 
   const catSel = document.querySelector('[data-action="filter-category"]');
   if(catSel) catSel.addEventListener('change', function(){ state.filter.category = catSel.value; render(); });
@@ -1676,6 +1797,30 @@ function bindGlobalEvents(){
       }
     });
   });
+
+  const addStaffForm = document.getElementById('add-staff-form');
+  if(addStaffForm){
+    addStaffForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      const fd = new FormData(addStaffForm);
+      setStaffAccount(fd.get('email'), fd.get('name'), fd.get('role')).then(function(){
+        showToast('已儲存人員帳號設定');
+        addStaffForm.reset();
+      }).catch(function(err){ showToast('儲存失敗：'+err.message, true); });
+    });
+  }
+  document.querySelectorAll('[data-action="staff-remove"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const email = btn.getAttribute('data-email');
+      if(email===normalizeEmail(state.firebaseUser.email)){
+        showToast('不能移除您自己目前登入中的帳號設定', true);
+        return;
+      }
+      if(confirm('確定要移除「'+email+'」這個帳號的人員設定嗎？（不會刪除 Firebase 登入帳號本身，只移除姓名/角色對照）')){
+        removeStaffAccount(email);
+      }
+    });
+  });
 }
 
 /* ====================== 啟動流程 ====================== */
@@ -1684,34 +1829,8 @@ function renderSetupNeededScreen(){
     + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
     + '<div class="modal" style="max-width:540px;">'
     + '  <div class="modal-head"><h2>尚未完成雲端設定</h2>'
-    + '  <p>請依照「Firebase設定教學」文件申請好 Firebase 專案後，把這個檔案最上方設定區塊裡的 <b>FIREBASE_CONFIG</b> 換成您自己專案的金鑰，並把 <b>ACCESS_CODE</b> 改成您自訂的通行碼，存檔後重新整理頁面即可。</p></div>'
+    + '  <p>請依照「Firebase設定教學」文件申請好 Firebase 專案後，把這個檔案最上方設定區塊裡的 <b>FIREBASE_CONFIG</b> 換成您自己專案的金鑰，存檔後重新整理頁面即可。</p></div>'
     + '</div></div>';
-}
-function renderAccessGate(){
-  document.getElementById('app').innerHTML = ''
-    + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
-    + '  <div class="modal" style="max-width:420px;">'
-    + '    <div class="modal-head"><h2>大同發展中心工作管理平台</h2><p>請輸入機構通行碼以繼續使用</p></div>'
-    + '    <div class="modal-body">'
-    + '      <input class="full" type="password" id="access-code-input" placeholder="請輸入通行碼" autofocus>'
-    + '      <div class="small-note" id="access-error" style="color:var(--warn); margin-top:8px;"></div>'
-    + '    </div>'
-    + '    <div class="modal-foot"><button class="btn btn-primary" id="access-submit">進入系統</button></div>'
-    + '  </div>'
-    + '</div>';
-  document.getElementById('access-submit').addEventListener('click', checkAccessCode);
-  document.getElementById('access-code-input').addEventListener('keydown', function(e){
-    if(e.key==='Enter'){ checkAccessCode(); }
-  });
-}
-function checkAccessCode(){
-  const v = document.getElementById('access-code-input').value;
-  if(v===ACCESS_CODE){
-    try{ localStorage.setItem('dt-access-granted','1'); }catch(e){}
-    startApp();
-  }else{
-    document.getElementById('access-error').textContent = '通行碼錯誤，請再試一次。';
-  }
 }
 function startApp(){
   document.getElementById('app').innerHTML = '<div class="empty">連線中…</div>';
@@ -1739,6 +1858,7 @@ function startApp(){
       settled = true;
       clearTimeout(timeoutId);
       if(user){
+        state.firebaseUser = {email: user.email, uid: user.uid};
         document.getElementById('app').innerHTML = '<div class="empty">登入成功，正在連接資料庫…</div>';
         let dataSettled = false;
         const dataTimeoutId = setTimeout(function(){
@@ -1748,7 +1868,6 @@ function startApp(){
         }, 20000);
         try{
           attachListeners();
-          loadCurrentUserFromDevice();
           render();
           dataSettled = true;
           clearTimeout(dataTimeoutId);
@@ -1757,12 +1876,11 @@ function startApp(){
           clearTimeout(dataTimeoutId);
           document.getElementById('app').innerHTML = '<div class="empty">畫面初始化失敗：'+escapeHtml(err.message)+'</div>';
         }
-        /* 種子資料（範例工作項目／人員清單／指標清單）在背景建立，不阻擋畫面顯示 */
+        /* 種子資料（範例工作項目／指標清單）在背景建立，不阻擋畫面顯示 */
         ensureSeedData().catch(function(err){ showToast('初始種子資料建立失敗：'+err.message, true); });
       }else{
-        authRef.signInAnonymously().catch(function(err){
-          document.getElementById('app').innerHTML = '<div class="empty">連線失敗：'+escapeHtml(err.message)+'<br><span class="small-note">請確認 Firebase 設定金鑰是否正確，並已在 Authentication 啟用「匿名」登入方式。</span></div>';
-        });
+        state.firebaseUser = null;
+        render();
       }
     }, function(err){
       settled = true;
@@ -1777,9 +1895,7 @@ function startApp(){
 }
 function boot(){
   if(isPlaceholderConfig()){ renderSetupNeededScreen(); return; }
-  let granted = false;
-  try{ granted = localStorage.getItem('dt-access-granted')==='1'; }catch(e){}
-  if(granted){ startApp(); } else { renderAccessGate(); }
+  startApp();
 }
 window.addEventListener('unhandledrejection', function(event){
   try{
