@@ -961,6 +961,43 @@ function removeStaffAccount(email){
     .then(function(){ showToast('已移除此帳號的人員設定'); })
     .catch(function(err){ showToast('移除失敗：'+err.message, true); });
 }
+function friendlyAuthError(err){
+  const map = {
+    'auth/email-already-in-use':'此 Email 已經有帳號',
+    'auth/invalid-email':'Email 格式不正確',
+    'auth/weak-password':'密碼強度不足，請至少 6 個字元',
+    'auth/network-request-failed':'網路連線失敗，請檢查網路後再試一次'
+  };
+  return map[err.code] || err.message;
+}
+function genRandomPassword(){
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let pwd = '';
+  for(let i=0;i<10;i++){ pwd += chars[Math.floor(Math.random()*chars.length)]; }
+  return pwd;
+}
+function createOrUpdateStaffAccount(email, password, name, role){
+  const e = normalizeEmail(email);
+  if(!e || !name) return Promise.reject(new Error('請填寫 Email 與姓名'));
+  if(!password){
+    return setStaffAccount(e, name, role).then(function(){ return {createdNew:false}; });
+  }
+  if(password.length < 6) return Promise.reject(new Error('密碼至少需要 6 個字元'));
+  const secondaryName = 'staffCreator'+Date.now();
+  let secondaryApp;
+  try{ secondaryApp = firebase.initializeApp(FIREBASE_CONFIG, secondaryName); }
+  catch(err){ return Promise.reject(new Error('系統初始化失敗：'+err.message)); }
+  let createdNew = true;
+  return secondaryApp.auth().createUserWithEmailAndPassword(e, password)
+    .then(function(){ return secondaryApp.auth().signOut(); })
+    .catch(function(err){
+      if(err.code === 'auth/email-already-in-use'){ createdNew = false; return; }
+      throw new Error(friendlyAuthError(err));
+    })
+    .then(function(){ return secondaryApp.delete().catch(function(){}); })
+    .then(function(){ return setStaffAccount(e, name, role); })
+    .then(function(){ return {createdNew:createdNew}; });
+}
 
 /* ====================== 衍生計算 ====================== */
 function visibleTasks(scope){
@@ -1727,15 +1764,20 @@ function renderStaffManagePanel(){
 
   let html = '<div class="panel" style="margin-bottom:18px;">'
     + '  <div class="panel-pad">'
-    + '    <div class="section-title">新增 / 更新人員帳號設定</div>'
-    + '    <div class="section-sub">把已在 Firebase Authentication 建立好的登入 Email，對應到姓名與角色。<b>請注意：這裡只設定「姓名與角色對照」，實際的登入帳號密碼仍需先到 Firebase Console → Authentication → Users 手動新增。</b></div>'
+    + '    <div class="section-title">建立新帳號／設定姓名角色</div>'
+    + '    <div class="section-sub">直接在這裡輸入 Email、密碼、姓名、角色即可一次完成，不需要再另外跳到 Firebase 後台設定。<br>如果這個 Email 之前已經有登入帳號了，密碼欄位可以留空，系統只會更新姓名／角色對照。</div>'
     + '    <form id="add-staff-form" style="margin-top:10px;">'
     + '      <div class="row-2">'
     + '        <div class="field-block"><label class="field-label">登入 Email</label><input class="full" type="email" name="email" placeholder="例如：staff01@gmail.com" required></div>'
     + '        <div class="field-block"><label class="field-label">角色</label><select class="full" name="role">'+ROLES.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('')+'</select></div>'
     + '      </div>'
     + '      <div class="field-block"><label class="field-label">姓名</label><input class="full" type="text" name="name" placeholder="例如：林組長" required></div>'
-    + '      <button class="btn btn-primary btn-sm" type="submit" style="margin-top:4px;">儲存</button>'
+    + '      <div class="field-block">'
+    + '        <label class="field-label">登入密碼（全新帳號才需要填；已有帳號可留空）</label>'
+    + '        <div style="display:flex; gap:8px;"><input class="full" type="text" name="password" id="new-staff-password" placeholder="至少6個字元" minlength="6" autocomplete="off"><button type="button" class="btn btn-sm" id="gen-password-btn">產生密碼</button></div>'
+    + '        <div class="small-note">建立成功後，請把這組 Email／密碼複製給新同仁，離開這個畫面後系統不會再顯示密碼，請務必先記下來。</div>'
+    + '      </div>'
+    + '      <button class="btn btn-primary btn-sm" type="submit" style="margin-top:4px;">建立／更新帳號</button>'
     + '    </form>'
     + '  </div>'
     + '</div>';
@@ -1759,6 +1801,45 @@ function renderStaffManagePanel(){
   return html;
 }
 
+function showReassignBeforeRemoveModal(email, personName, tasks){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'reassign-overlay';
+  const otherNames = state.roster.map(function(r){ return r.name; }).filter(function(n){ return n!==personName; });
+  overlay.innerHTML = ''
+    + '<div class="modal">'
+    + '  <div class="modal-head"><h2>⚠️ 這位同仁還有未完成的工作</h2><p>「'+escapeHtml(personName)+'」名下還有 '+tasks.length+' 項尚未完成的工作項目，移除帳號前，請先決定要轉派給誰，避免交接遺漏：</p></div>'
+    + '  <div class="modal-body">'
+    + '    <ul style="margin:0 0 14px; padding-left:18px; font-size:13px;">'+tasks.map(function(t){ return '<li>'+escapeHtml(t.title)+'（目前進度 '+(t.progress||0)+'%）</li>'; }).join('')+'</ul>'
+    + '    <div class="field-block"><label class="field-label">將以上工作全部轉派給</label><select class="full" id="reassign-target">'
+    +        (otherNames.length ? otherNames.map(function(n){ return '<option value="'+escapeHtml(n)+'">'+escapeHtml(n)+'</option>'; }).join('') : '<option value="">（人員名單中沒有其他人，請先新增其他同仁再移除）</option>')
+    +     '</select></div>'
+    + '  </div>'
+    + '  <div class="modal-foot"><button class="btn" id="reassign-cancel">先不要移除</button><button class="btn btn-primary" id="reassign-confirm"'+(otherNames.length ? '' : ' disabled')+'>轉派並移除帳號</button></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  function close(){ overlay.remove(); }
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) close(); });
+  document.getElementById('reassign-cancel').addEventListener('click', close);
+  document.getElementById('reassign-confirm').addEventListener('click', function(){
+    const target = document.getElementById('reassign-target').value;
+    if(!target) return;
+    const btn = document.getElementById('reassign-confirm');
+    btn.disabled = true; btn.textContent = '處理中…';
+    const batch = db.batch();
+    tasks.forEach(function(t){ batch.update(db.collection('tasks').doc(t.id), {assignee: target}); });
+    batch.commit().then(function(){
+      return removeStaffAccount(email);
+    }).then(function(){
+      showToast('已將 '+tasks.length+' 項工作轉派給「'+target+'」，並移除「'+personName+'」的帳號設定');
+      close();
+      render();
+    }).catch(function(err){
+      btn.disabled = false; btn.textContent = '轉派並移除帳號';
+      showToast('處理失敗：'+err.message, true);
+    });
+  });
+}
 function showNewTaskModal(presets){
   presets = presets || {};
   let draft = null;
@@ -1825,6 +1906,18 @@ function showNewTaskModal(presets){
   document.getElementById('new-task-cancel').addEventListener('click', closeNewTaskModal);
   document.getElementById('new-task-submit').addEventListener('click', function(){
     if(!form.checkValidity()){ form.reportValidity(); return; }
+    const fdCheck = new FormData(form);
+    const assigneeName = (fdCheck.get('assignee')||'').trim();
+    const knownNames = state.roster.map(function(r){ return r.name; });
+    if(assigneeName && knownNames.indexOf(assigneeName)===-1){
+      const proceed = confirm(
+        '⚠️ 您輸入的負責人「'+assigneeName+'」不在目前的人員名單中，可能是打字有誤。\n\n'+
+        '目前人員名單：'+(knownNames.join('、')||'（尚無人員）')+'\n\n'+
+        '如果確定要用這個名字繼續，請按「確定」；要回去修改請按「取消」。\n'+
+        '提醒：名字沒對上的話，這項工作將不會出現在「同仁總覽看板」與「每週彙總卡」裡。'
+      );
+      if(!proceed) return;
+    }
     const submitBtn = document.getElementById('new-task-submit');
     submitBtn.disabled = true;
     submitBtn.textContent = '儲存中…請稍候，完成前請勿關閉或重新整理';
@@ -2170,13 +2263,29 @@ function bindGlobalEvents(){
 
   const addStaffForm = document.getElementById('add-staff-form');
   if(addStaffForm){
+    const genBtn = document.getElementById('gen-password-btn');
+    if(genBtn) genBtn.addEventListener('click', function(){
+      document.getElementById('new-staff-password').value = genRandomPassword();
+    });
     addStaffForm.addEventListener('submit', function(e){
       e.preventDefault();
       const fd = new FormData(addStaffForm);
-      setStaffAccount(fd.get('email'), fd.get('name'), fd.get('role')).then(function(){
-        showToast('已儲存人員帳號設定');
+      const email = fd.get('email'), name = fd.get('name'), role = fd.get('role'), password = (fd.get('password')||'').trim();
+      const submitBtn = addStaffForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true; submitBtn.textContent = '處理中…';
+      createOrUpdateStaffAccount(email, password, name, role).then(function(result){
+        if(result.createdNew){
+          showToast('已建立新帳號並設定姓名／角色！請把 Email「'+email+'」與密碼複製給新同仁。');
+        }else{
+          showToast('已更新姓名／角色對照（此 Email 原本就有帳號，密碼未變動）');
+        }
         addStaffForm.reset();
-      }).catch(function(err){ showToast('儲存失敗：'+err.message, true); });
+        submitBtn.disabled = false; submitBtn.textContent = '建立／更新帳號';
+        render();
+      }).catch(function(err){
+        submitBtn.disabled = false; submitBtn.textContent = '建立／更新帳號';
+        showToast('儲存失敗：'+err.message, true);
+      });
     });
   }
   document.querySelectorAll('[data-action="staff-remove"]').forEach(function(btn){
@@ -2184,6 +2293,12 @@ function bindGlobalEvents(){
       const email = btn.getAttribute('data-email');
       if(email===normalizeEmail(state.firebaseUser.email)){
         showToast('不能移除您自己目前登入中的帳號設定', true);
+        return;
+      }
+      const personName = state.staffDirectory[email] ? state.staffDirectory[email].name : null;
+      const unfinished = personName ? state.tasks.filter(function(t){ return t.assignee===personName && t.status!=='已完成'; }) : [];
+      if(unfinished.length>0){
+        showReassignBeforeRemoveModal(email, personName, unfinished);
         return;
       }
       if(confirm('確定要移除「'+email+'」這個帳號的人員設定嗎？（不會刪除 Firebase 登入帳號本身，只移除姓名/角色對照）')){
