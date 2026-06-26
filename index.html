@@ -2161,7 +2161,20 @@ function bindGlobalEvents(){
   const stSel = document.querySelector('[data-action="filter-status"]');
   if(stSel) stSel.addEventListener('change', function(){ state.filter.status = stSel.value; render(); });
   const kwInput = document.querySelector('[data-action="filter-keyword"]');
-  if(kwInput) kwInput.addEventListener('input', function(){ state.filter.keyword = kwInput.value; render(); });
+  if(kwInput){
+    let composing = false;
+    kwInput.addEventListener('compositionstart', function(){ composing = true; });
+    kwInput.addEventListener('compositionend', function(){
+      composing = false;
+      state.filter.keyword = kwInput.value;
+      render();
+    });
+    kwInput.addEventListener('input', function(e){
+      if(composing || e.isComposing) return; /* 注音／拼音等輸入法選字過程中，先不要重繪畫面，避免打斷選字 */
+      state.filter.keyword = kwInput.value;
+      render();
+    });
+  }
 
   const onboardingBtn = document.querySelector('[data-action="show-onboarding"]');
   if(onboardingBtn) onboardingBtn.addEventListener('click', function(){ showOnboardingGuide(); });
