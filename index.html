@@ -744,6 +744,58 @@ function statusColor(s){
   if(s==='已完成') return {bg:'#DCEEDD', fg:'#2C6B3A'};
   return {bg:'#F5E4D7', fg:'#9C4A1F'};
 }
+
+/* ====================== 日曆串接（等級①：一鍵加入Google日曆／下載通用ics檔） ====================== */
+function nextDayStr(dateStr){
+  const d = new Date(dateStr);
+  d.setDate(d.getDate()+1);
+  return d.toISOString().slice(0,10);
+}
+function googleCalUrl(t){
+  if(!t.reminderDate) return '#';
+  const start = t.reminderDate.replace(/-/g,'');
+  const end = nextDayStr(t.reminderDate).replace(/-/g,'');
+  const text = encodeURIComponent('【大同發展中心】'+t.title);
+  const details = encodeURIComponent(
+    '負責人：'+(t.assignee||'')+'\n'+
+    '對應指標：'+(t.indicator||'無')+'\n'+
+    '請至「大同發展中心工作管理平台」更新進度：https://renotzeng300-lang.github.io/datong-worktracker/'
+  );
+  return 'https://www.google.com/calendar/render?action=TEMPLATE&text='+text+'&dates='+start+'/'+end+'&details='+details;
+}
+function escapeIcsText(s){
+  return String(s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');
+}
+function buildIcsContent(t){
+  const start = t.reminderDate.replace(/-/g,'');
+  const end = nextDayStr(t.reminderDate).replace(/-/g,'');
+  const stamp = todayStr().replace(/-/g,'')+'T000000Z';
+  const lines = [
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Datong Worktracker//ZH-TW','CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    'UID:datong-'+t.id+'@worktracker',
+    'DTSTAMP:'+stamp,
+    'DTSTART;VALUE=DATE:'+start,
+    'DTEND;VALUE=DATE:'+end,
+    'SUMMARY:'+escapeIcsText('【大同發展中心】'+t.title),
+    'DESCRIPTION:'+escapeIcsText('負責人：'+(t.assignee||'')+'；對應指標：'+(t.indicator||'無')),
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ];
+  return lines.join('\r\n');
+}
+function downloadIcs(t){
+  const content = buildIcsContent(t);
+  const blob = new Blob([content], {type:'text/calendar;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (t.title||'提醒').replace(/[\\/:*?"<>|]/g,'_')+'.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
 function reviewColor(s){
   if(s==='已核可') return {bg:'#DCEEDD', fg:'#2C6B3A'};
   if(s==='請補充說明') return {bg:'#F5E4D7', fg:'#9C4A1F'};
@@ -1361,6 +1413,12 @@ function renderTaskCard(t){
 
   // 右：主任批改 / 提醒設定 / 優先順序 / 佐證資料
   body += '<div>';
+  if(t.reminderDate){
+    body += '<div style="margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap;">'
+      + '<a class="btn btn-sm" style="text-decoration:none; display:inline-block;" href="'+googleCalUrl(t)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">📅 加入 Google 日曆</a>'
+      + '<button class="btn btn-sm" type="button" data-action="download-ics" data-id="'+t.id+'">⬇️ 下載 .ics（Outlook／手機日曆通用）</button>'
+      + '</div>';
+  }
   if(isDirector){
     body += '<div class="director-box">'
       + '<label class="field-label">主任批改</label>'
@@ -1835,6 +1893,15 @@ function bindGlobalEvents(){
   if(dismissReminderBtn) dismissReminderBtn.addEventListener('click', function(){
     try{ localStorage.setItem(selfReminderDismissKey(), '1'); }catch(e){}
     render();
+  });
+
+  document.querySelectorAll('[data-action="download-ics"]').forEach(function(el){
+    el.addEventListener('click', function(e){
+      e.stopPropagation();
+      const id = el.getAttribute('data-id');
+      const t = state.tasks.find(function(x){ return x.id===id; });
+      if(t) downloadIcs(t);
+    });
   });
 
   const catSel = document.querySelector('[data-action="filter-category"]');
