@@ -167,6 +167,10 @@
 
   .log-list{display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto; padding-right:4px; margin-bottom:10px;}
   .log-entry{background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px 11px;}
+  .log-entry-editing{background:var(--accent-soft); border-color:var(--accent);}
+  .btn-link{background:none; border:none; padding:0; color:var(--accent); font-size:11.5px; font-weight:600; cursor:pointer; text-decoration:underline;}
+  .btn-link:hover{color:var(--accent-ink);}
+  .edited-tag{color:var(--warn); font-weight:700; margin-left:5px; font-size:10.5px;}
   .log-entry .lhead{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-soft); margin-bottom:3px; gap:8px;}
   .log-entry .lnote{font-size:13px; white-space:pre-wrap;}
   .field-label{font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:5px; display:block;}
@@ -560,10 +564,10 @@ function staffBoardData(){
   });
 }
 function staffBadge(days){
-  if(days===null) return {bg:'#F5E4D7', fg:'#9C4A1F', text:'尚無登打紀錄'};
-  if(days<=2) return {bg:'#DCEEDD', fg:'#2C6B3A', text:(days===0?'今天更新過':days+' 天前更新')};
-  if(days<=6) return {bg:'#FCEFD9', fg:'#9C6B1F', text:days+' 天前更新'};
-  return {bg:'#F5E4D7', fg:'#9C4A1F', text:days+' 天前更新'};
+  if(days===null) return {bg:'#F5E4D7', fg:'#9C4A1F', text:'■ 尚無登打紀錄'};
+  if(days<=2) return {bg:'#DCEEDD', fg:'#2C6B3A', text:'● '+(days===0?'今天更新過':days+' 天前更新')};
+  if(days<=6) return {bg:'#FCEFD9', fg:'#9C6B1F', text:'▲ '+days+' 天前更新'};
+  return {bg:'#F5E4D7', fg:'#9C4A1F', text:'■ '+days+' 天前更新'};
 }
 
 /* ====================== 同仁自我提醒（登入時提醒自己手上太久沒更新的工作） ====================== */
@@ -700,7 +704,7 @@ function renderWeeklyDigest(){
     const hasUpdate = s.updateCount>0;
     const badgeBg = hasUpdate ? '#DCEEDD' : '#F5E4D7';
     const badgeFg = hasUpdate ? '#2C6B3A' : '#9C4A1F';
-    const badgeText = hasUpdate ? ('本週更新 '+s.updateCount+' 項') : '本週尚無更新';
+    const badgeText = hasUpdate ? ('● 本週更新 '+s.updateCount+' 項') : '■ 本週尚無更新';
     let entriesHtml;
     if(!hasUpdate){
       entriesHtml = '<div class="small-note">本週尚未看到這位同仁登打任何進度，建議主動關心一下。</div>';
@@ -860,6 +864,7 @@ const state = {
   activeTab: 'overview',
   filter: {category:'all', assignee:'all', status:'all'},
   openTaskId: null,
+  editingLogKey: null,  // 格式 "taskId#index"，用於記錄目前正在編輯哪一筆登打紀錄
   modal: null,      // null | 'newTask'
   saving: false
 };
@@ -1034,7 +1039,7 @@ function defaultCycle(){
 }
 function addLog(taskId, note, progress, status){
   const t = findTask(taskId); if(!t) return Promise.reject(new Error('找不到工作項目'));
-  const logEntry = {date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note:note, progress:Number(progress), status:status};
+  const logEntry = {id: genId(), date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note:note, progress:Number(progress), status:status};
   const newReviewStatus = (status==='已完成' && t.reviewStatus!=='已核可') ? '待審核' : t.reviewStatus;
   return db.collection('tasks').doc(taskId).update({
     progress: Number(progress),
@@ -1043,9 +1048,29 @@ function addLog(taskId, note, progress, status){
     logs: firebase.firestore.FieldValue.arrayUnion(logEntry)
   });
 }
+function editLog(taskId, idx, note, progress, status){
+  const t = findTask(taskId); if(!t) return Promise.reject(new Error('找不到工作項目'));
+  const original = t.logs[idx];
+  if(!original) return Promise.reject(new Error('找不到這筆紀錄，可能畫面尚未更新，請重新整理後再試一次'));
+  if(original.author !== state.currentUser.name){
+    return Promise.reject(new Error('只能修改自己登打的紀錄'));
+  }
+  const newLogs = t.logs.slice();
+  newLogs[idx] = Object.assign({}, original, {
+    note: note, progress: Number(progress), status: status,
+    edited: true, editedAt: todayStr()
+  });
+  const updateData = { logs: newLogs };
+  /* 如果修改的是「最新一筆」紀錄，連帶同步工作項目目前顯示的進度／狀態，避免跟歷史紀錄不一致 */
+  if(idx === t.logs.length-1){
+    updateData.progress = Number(progress);
+    updateData.status = status;
+  }
+  return db.collection('tasks').doc(taskId).update(updateData);
+}
 function setReview(taskId, reviewStatus, comment){
   const t = findTask(taskId); if(!t) return;
-  const logEntry = {date:todayStr(), author:(state.currentUser?state.currentUser.name:'主任')+'（主任批示）', note:(reviewStatus + (comment? '：'+comment : '')), progress:t.progress, status:t.status};
+  const logEntry = {id: genId(), date:todayStr(), author:(state.currentUser?state.currentUser.name:'主任')+'（主任批示）', note:(reviewStatus + (comment? '：'+comment : '')), progress:t.progress, status:t.status};
   db.collection('tasks').doc(taskId).update({
     reviewStatus: reviewStatus,
     directorComment: comment,
@@ -1345,6 +1370,33 @@ function renderTaskListPanel(scope){
   return html;
 }
 
+function renderLogEntry(t, l, idx){
+  const isOwn = !!(state.currentUser && l.author === state.currentUser.name);
+  const key = t.id+'#'+idx;
+  const editing = state.editingLogKey === key;
+  if(editing){
+    return '<div class="log-entry log-entry-editing">'
+      + '<form data-action="edit-log" data-id="'+t.id+'" data-idx="'+idx+'">'
+      +   '<div class="field-block"><label class="field-label">修改執行說明</label><textarea name="note" required>'+escapeHtml(l.note)+'</textarea></div>'
+      +   '<div class="row-2">'
+      +     '<div class="field-block"><label class="field-label">進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+(l.progress||0)+'"></div>'
+      +     '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
+      +   '</div>'
+      +   '<div style="display:flex; gap:8px;">'
+      +     '<button class="btn btn-primary btn-sm" type="submit">儲存修改</button>'
+      +     '<button class="btn btn-ghost btn-sm" type="button" data-action="cancel-edit-log">取消</button>'
+      +   '</div>'
+      + '</form>'
+      + '</div>';
+  }
+  const editedTag = l.edited ? '<span class="edited-tag" title="最後修改於 '+escapeHtml(l.editedAt||'')+'">（此紀錄已修改過）</span>' : '';
+  const editBtn = isOwn ? '<div style="margin-top:5px;"><button class="btn-link" type="button" data-action="open-edit-log" data-id="'+t.id+'" data-idx="'+idx+'">✏️ 修改這筆紀錄</button></div>' : '';
+  return '<div class="log-entry">'
+    + '<div class="lhead"><span>'+escapeHtml(l.author)+editedTag+'</span><span>'+l.date+' · 進度 '+l.progress+'% · '+l.status+'</span></div>'
+    + '<div class="lnote">'+escapeHtml(l.note)+'</div>'
+    + editBtn
+    + '</div>';
+}
 function renderTaskCard(t){
   const cat = catInfo(t.category);
   const open = state.openTaskId===t.id;
@@ -1391,9 +1443,7 @@ function renderTaskCard(t){
   body += '<div>'
     + '<label class="field-label">執行情形紀錄</label>'
     + '<div class="log-list">'
-    +   t.logs.slice().reverse().map(function(l){
-          return '<div class="log-entry"><div class="lhead"><span>'+escapeHtml(l.author)+'</span><span>'+l.date+' · 進度 '+l.progress+'% · '+l.status+'</span></div><div class="lnote">'+escapeHtml(l.note)+'</div></div>';
-        }).join('')
+    +   t.logs.map(function(l, idx){ return {l:l, idx:idx}; }).slice().reverse().map(function(o){ return renderLogEntry(t, o.l, o.idx); }).join('')
     + '</div>';
   if(canEdit){
     let draftNote = '';
@@ -1999,6 +2049,37 @@ function bindGlobalEvents(){
   document.querySelectorAll('.log-draft-input').forEach(function(ta){
     ta.addEventListener('input', function(){
       try{ localStorage.setItem('dt-log-draft-'+ta.getAttribute('data-task-id'), ta.value); }catch(e){}
+    });
+  });
+
+  document.querySelectorAll('[data-action="open-edit-log"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      state.editingLogKey = btn.getAttribute('data-id')+'#'+btn.getAttribute('data-idx');
+      render();
+    });
+  });
+  document.querySelectorAll('[data-action="cancel-edit-log"]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      state.editingLogKey = null;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-action="edit-log"]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const id = form.getAttribute('data-id');
+      const idx = Number(form.getAttribute('data-idx'));
+      const fd = new FormData(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = '儲存中…'; }
+      editLog(id, idx, fd.get('note'), fd.get('progress'), fd.get('status')).then(function(){
+        state.editingLogKey = null;
+        showToast('已修改這筆紀錄');
+        render();
+      }).catch(function(err){
+        if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = '儲存修改'; }
+        showToast('修改失敗：'+err.message, true);
+      });
     });
   });
 
