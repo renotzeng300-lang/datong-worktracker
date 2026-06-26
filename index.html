@@ -248,6 +248,18 @@
   .activity-stale{color:var(--warn); font-weight:700;}
   .activity-row{display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px dashed var(--line); font-size:13px;}
   .activity-row:last-child{border-bottom:none;}
+  .staff-board-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin-bottom:20px;}
+  .sb-card .panel-pad{padding:16px 18px;}
+  .sb-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px;}
+  .sb-who{display:flex; align-items:center; gap:10px; min-width:0;}
+  .sb-avatar{width:36px; height:36px; border-radius:50%; background:var(--accent-soft); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex:none;}
+  .sb-name{font-size:14px; font-weight:700;}
+  .sb-role{font-size:11.5px; color:var(--ink-soft);}
+  .sb-task{margin-bottom:10px;}
+  .sb-task:last-child{margin-bottom:0;}
+  .sb-task-top{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:4px;}
+  .sb-task-title{color:var(--ink); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .sb-task-pct{color:var(--ink-soft); font-family:ui-monospace,monospace; flex:none;}
   .draft-banner{
     background:var(--accent-soft); border:1px solid #CFE3DC; border-radius:8px;
     padding:8px 12px; font-size:12px; color:var(--accent-ink); margin-bottom:12px;
@@ -516,6 +528,81 @@ function staffActivity(){
   });
 }
 
+
+/* ====================== 同仁總覽看板（依人員彙整手上工作與最近更新狀況） ====================== */
+function staffBoardData(){
+  const lastByName = {};
+  state.tasks.forEach(function(t){
+    t.logs.forEach(function(l){
+      const name = (l.author||'').replace('（主任批示）','').trim();
+      if(!name) return;
+      if(!lastByName[name] || l.date > lastByName[name]) lastByName[name] = l.date;
+    });
+  });
+  const today = todayStr();
+  return state.roster.map(function(r){
+    const last = lastByName[r.name] || null;
+    let days = null;
+    if(last){ days = Math.round((new Date(today) - new Date(last)) / 86400000); }
+    const myTasks = state.tasks.filter(function(t){ return t.assignee===r.name; });
+    const active = myTasks.filter(function(t){ return t.status!=='已完成'; }).sort(function(a,b){
+      const ao = isOverdue(a) ? 0 : 1;
+      const bo = isOverdue(b) ? 0 : 1;
+      if(ao!==bo) return ao-bo;
+      return (a.endDate||'9999').localeCompare(b.endDate||'9999');
+    });
+    return {name:r.name, role:r.role, last:last, days:days, tasks:active, doneCount: myTasks.length-active.length, totalCount: myTasks.length};
+  }).sort(function(a,b){
+    if(a.days===null && b.days===null) return 0;
+    if(a.days===null) return -1;
+    if(b.days===null) return 1;
+    return b.days - a.days;
+  });
+}
+function staffBadge(days){
+  if(days===null) return {bg:'#F5E4D7', fg:'#9C4A1F', text:'尚無登打紀錄'};
+  if(days<=2) return {bg:'#DCEEDD', fg:'#2C6B3A', text:(days===0?'今天更新過':days+' 天前更新')};
+  if(days<=6) return {bg:'#FCEFD9', fg:'#9C6B1F', text:days+' 天前更新'};
+  return {bg:'#F5E4D7', fg:'#9C4A1F', text:days+' 天前更新'};
+}
+function renderStaffBoard(){
+  const data = staffBoardData();
+  if(data.length===0){
+    return '<div class="panel"><div class="empty">尚未設定任何人員，請先到「人員帳號管理」分頁新增同仁。</div></div>';
+  }
+  let html = '<div class="small-note" style="margin-bottom:14px;">依「最近一次登打紀錄」由久到近排序，越久沒更新的同仁排在越前面，方便您優先關心。綠色＝近期有更新／黃色＝3-6天沒動靜／橘紅＝7天以上沒更新或尚無紀錄。</div>';
+  html += '<div class="staff-board-grid">';
+  html += data.map(function(s){
+    const badge = staffBadge(s.days);
+    const initial = (s.name||'？').slice(0,1);
+    let tasksHtml = '';
+    if(s.tasks.length===0){
+      tasksHtml = '<div class="small-note">目前沒有進行中的工作項目'+(s.doneCount>0?'（已完成 '+s.doneCount+' 項）':'')+'。</div>';
+    }else{
+      tasksHtml = s.tasks.slice(0,4).map(function(t){
+        const overdue = isOverdue(t);
+        return '<div class="sb-task">'
+          + '<div class="sb-task-top"><span class="sb-task-title">'+(overdue?'⚠️ ':'')+escapeHtml(t.title)+'</span><span class="sb-task-pct">'+(t.progress||0)+'%</span></div>'
+          + '<div class="track"><div class="fill" style="width:'+(t.progress||0)+'%; background:'+(overdue?'var(--warn)':'var(--accent)')+'"></div></div>'
+          + '</div>';
+      }).join('');
+      if(s.tasks.length>4){
+        tasksHtml += '<div class="small-note" style="margin-top:2px;">還有 '+(s.tasks.length-4)+' 項，請至「全部工作」查看完整清單</div>';
+      }
+    }
+    return '<div class="panel sb-card">'
+      + '  <div class="panel-pad">'
+      + '    <div class="sb-head">'
+      + '      <div class="sb-who"><div class="sb-avatar">'+escapeHtml(initial)+'</div><div><div class="sb-name">'+escapeHtml(s.name)+'</div><div class="sb-role">'+escapeHtml(s.role)+'</div></div></div>'
+      + '      <span class="status-badge" style="background:'+badge.bg+'; color:'+badge.fg+'">'+badge.text+'</span>'
+      + '    </div>'
+      + tasksHtml
+      + '  </div>'
+      + '</div>';
+  }).join('');
+  html += '</div>';
+  return html;
+}
 
 function catInfo(id){ return CATEGORIES.find(function(c){return c.id===id;}) || CATEGORIES[CATEGORIES.length-1]; }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
@@ -973,6 +1060,7 @@ function renderTabsAndBody(){
     + tabBtn('all','全部工作')
     + tabBtn('indicators','指標對照表');
   if(isDirector){
+    tabsHtml += tabBtn('staffBoard','同仁總覽');
     tabsHtml += tabBtn('review','審核與提醒', reviewCount);
     tabsHtml += tabBtn('indManage','指標管理');
     tabsHtml += tabBtn('staffManage','人員帳號管理');
@@ -984,6 +1072,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='mine') body = renderTaskListPanel('mine');
   else if(state.activeTab==='all') body = renderTaskListPanel('all');
   else if(state.activeTab==='indicators') body = renderIndicatorPanel();
+  else if(state.activeTab==='staffBoard' && isDirector) body = renderStaffBoard();
   else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
   else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
   else if(state.activeTab==='staffManage' && isDirector) body = renderStaffManagePanel();
@@ -1858,6 +1947,12 @@ function startApp(){
       settled = true;
       clearTimeout(timeoutId);
       if(user){
+        if(!user.email){
+          firebase.auth().signOut().then(function(){
+            document.getElementById('app').innerHTML = '<div class="empty">⚠️ 偵測到登入狀態異常（找不到對應的 Email，可能是舊版「通行碼登入」殘留在此瀏覽器中）。<br>系統已自動將您登出，請重新整理頁面後，改用 Email／密碼重新登入。<br><span class="small-note">如果重新整理、重新登入後仍出現這個訊息，請按 F12 開啟「Console」分頁截圖，回報給系統管理人員協助排查。</span><br><button class="btn btn-sm" style="margin-top:10px;" onclick="location.reload()">重新整理頁面</button></div>';
+          });
+          return;
+        }
         state.firebaseUser = {email: user.email, uid: user.uid};
         document.getElementById('app').innerHTML = '<div class="empty">登入成功，正在連接資料庫…</div>';
         let dataSettled = false;
