@@ -151,6 +151,7 @@
   .task-meta span{display:flex; align-items:center; gap:4px;}
   .status-badge{font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; flex:none; white-space:nowrap;}
   .ring-wrap{flex:none; position:relative; width:44px; height:44px;}
+  .ring-wrap svg{width:100%; height:100%;}
   .ring-pct{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; font-family:ui-monospace,monospace;}
   .overdue-flag{
     background:var(--warn); color:#fff; font-size:10.5px; font-weight:700;
@@ -161,10 +162,33 @@
   }
   .chev{flex:none; color:var(--ink-faint); font-size:13px; transition:transform .15s;}
   .task-card.open .chev{transform:rotate(90deg);}
+  .task-head-badges{display:flex; align-items:center; gap:7px; flex:none;}
   @media (max-width:640px){
-    .app-header{flex-wrap:wrap;}
-    .header-actions{flex-wrap:wrap; width:100%; justify-content:flex-start;}
-    .task-head{flex-wrap:wrap;}
+    .app-header{flex-wrap:wrap; padding:12px 14px; gap:8px;}
+    .brand-text h1{font-size:14px;}
+    .brand-text p{font-size:10.5px;}
+    .header-actions{flex-wrap:wrap; width:100%; justify-content:flex-start; gap:6px;}
+    .header-actions .btn-sm, .header-actions .export-btn{flex:1 1 auto; justify-content:center; text-align:center; font-size:11.5px; padding:7px 8px;}
+    .user-chip{width:100%; justify-content:space-between;}
+
+    .container{padding:14px 12px 60px;}
+
+    .tabs{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px; margin-bottom:12px; scrollbar-width:thin;}
+    .tab{flex:none; padding:8px 13px; font-size:12.5px;}
+
+    .filter-bar{gap:8px;}
+    .filter-bar input[type=text]{flex:1 1 100%;}
+    .filter-bar select{flex:1 1 calc(50% - 4px); min-width:0;}
+    .filter-bar .spacer{flex:0; display:none;}
+    .filter-bar > button{flex:1 1 100%;}
+
+    .task-head{flex-wrap:wrap; gap:10px; padding:12px 14px;}
+    .ring-wrap{width:36px; height:36px;}
+    .ring-pct{font-size:9.5px;}
+    .task-title{font-size:13.5px;}
+    .task-meta{gap:7px 10px; font-size:11px;}
+    .task-head-badges{width:100%; flex-wrap:wrap;}
+    .chev{display:none;}
   }
 
   .task-body{display:none; border-top:1px solid var(--line); padding:16px 18px; background:#FBFAF7;}
@@ -1721,23 +1745,23 @@ function renderTaskCard(t){
     +   '<div class="ring-pct">'+(t.progress||0)+'%</div>'
     + '</div>'
     + '<div class="task-main">'
-    +   '<div class="task-title-row">'
-    +     '<span class="task-title">'+escapeHtml(t.title)+'</span>'
+    +   '<div class="task-title-row"><span class="task-title">'+escapeHtml(t.title)+'</span></div>'
+    +   '<div class="task-meta">'
     +     (t.indicator? '<span class="cat-badge" style="background:'+cat.soft+'; color:'+cat.color+'" title="'+escapeHtml(indTooltip)+'">'+escapeHtml(t.indicator)+'</span>' : '')
     +     '<span class="priority-badge priority-'+priority+'">優先：'+priority+'</span>'
     +     (t.cycle? '<span class="cycle-tag">'+escapeHtml(t.cycle)+'</span>' : '')
-    +   '</div>'
-    +   '<div class="task-meta">'
     +     '<span>👤 '+escapeHtml(t.assignee)+'（'+escapeHtml(t.role)+'）</span>'
     +     '<span>🗓 '+ (t.startDate||'—') +' ～ '+ (t.endDate||'未定') +'</span>'
     +     (t.reminderDate? '<span>⏰ 提醒：'+t.reminderDate+'</span>' : '')
     +     (t.evidenceUrl? '<span>🔗 <a href="'+escapeHtml(t.evidenceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">佐證資料</a></span>' : '')
     +   '</div>'
     + '</div>'
-    + (overdue? '<span class="overdue-flag">逾期待辦</span>' : '')
-    + '<span class="review-flag" style="background:'+reviewColor(t.reviewStatus).bg+'; color:'+reviewColor(t.reviewStatus).fg+'">'+t.reviewStatus+'</span>'
-    + '<span class="status-badge" style="background:'+sc.bg+'; color:'+sc.fg+'">'+t.status+'</span>'
-    + '<span class="chev">▶</span>'
+    + '<div class="task-head-badges">'
+    +   (overdue? '<span class="overdue-flag">逾期待辦</span>' : '')
+    +   '<span class="review-flag" style="background:'+reviewColor(t.reviewStatus).bg+'; color:'+reviewColor(t.reviewStatus).fg+'">'+t.reviewStatus+'</span>'
+    +   '<span class="status-badge" style="background:'+sc.bg+'; color:'+sc.fg+'">'+t.status+'</span>'
+    +   '<span class="chev">▶</span>'
+    + '</div>'
     + '</div>';
 
   let body = '<div class="task-body"><div class="body-grid">';
