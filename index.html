@@ -169,8 +169,6 @@
   .log-entry{background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px 11px;}
   .log-entry-editing{background:var(--accent-soft); border-color:var(--accent);}
   .btn-link{background:none; border:none; padding:0; color:var(--accent); font-size:11.5px; font-weight:600; cursor:pointer; text-decoration:underline;}
-  .evidence-file-list{list-style:none; padding:0; margin:8px 0 0; display:flex; flex-direction:column; gap:6px; font-size:12.5px;}
-  .evidence-file-list li{background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 9px;}
   .btn-link:hover{color:var(--accent-ink);}
   .edited-tag{color:var(--warn); font-weight:700; margin-left:5px; font-size:10.5px;}
   .log-entry .lhead{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-soft); margin-bottom:3px; gap:8px;}
@@ -317,14 +315,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <div id="app"><div class="empty">載入中…</div></div>
 <div id="toast"></div>
 
 <script>
 let db = null; /* Firestore 實例，連線成功後賦值 */
-let storage = null; /* Storage 實例，連線成功後賦值（用於佐證資料檔案上傳） */
 
 /* ====================== 基礎設定 ====================== */
 const ROLES = ['主任','教保組長','教保員','總務','出納','社工'];
@@ -1154,47 +1150,6 @@ function setEvidence(taskId, url){
     .then(function(){ showToast('已更新佐證資料連結'); })
     .catch(function(err){ showToast('更新失敗：'+err.message, true); });
 }
-function formatFileSize(bytes){
-  if(!bytes) return '0KB';
-  if(bytes < 1024*1024) return Math.round(bytes/1024)+'KB';
-  return (bytes/1024/1024).toFixed(1)+'MB';
-}
-function uploadEvidenceFile(taskId, file, onProgress){
-  if(!storage) return Promise.reject(new Error('Storage 尚未啟用，請確認 Firebase 後台已開啟 Storage 服務'));
-  if(!file) return Promise.reject(new Error('未選擇檔案'));
-  if(file.size > 10*1024*1024) return Promise.reject(new Error('檔案大小超過 10MB 限制'));
-  const path = 'evidence/'+taskId+'/'+Date.now()+'_'+file.name;
-  const ref = storage.ref().child(path);
-  const task = ref.put(file);
-  return new Promise(function(resolve, reject){
-    task.on('state_changed', function(snap){
-      if(onProgress) onProgress(Math.round(snap.bytesTransferred/snap.totalBytes*100));
-    }, function(err){ reject(err); }, function(){
-      task.snapshot.ref.getDownloadURL().then(function(url){
-        const fileEntry = {
-          name: file.name, url: url, path: path, size: file.size,
-          uploadedAt: todayStr(), uploadedBy: state.currentUser?state.currentUser.name:'未知'
-        };
-        db.collection('tasks').doc(taskId).update({
-          evidenceFiles: firebase.firestore.FieldValue.arrayUnion(fileEntry)
-        }).then(resolve).catch(reject);
-      }).catch(reject);
-    });
-  });
-}
-function deleteEvidenceFile(taskId, fileEntry){
-  const t = findTask(taskId); if(!t) return;
-  const cleanup = function(){
-    const newFiles = (t.evidenceFiles||[]).filter(function(f){ return f.path!==fileEntry.path; });
-    return db.collection('tasks').doc(taskId).update({evidenceFiles:newFiles});
-  };
-  if(!storage) return cleanup();
-  storage.ref().child(fileEntry.path).delete()
-    .catch(function(){ /* 即使儲存空間裡的檔案刪除失敗（例如已經手動刪過），仍繼續移除資料庫紀錄 */ })
-    .then(cleanup)
-    .then(function(){ showToast('已刪除檔案'); })
-    .catch(function(err){ showToast('刪除失敗：'+err.message, true); });
-}
 function setPriority(taskId, priority){
   db.collection('tasks').doc(taskId).update({priority: priority})
     .then(function(){ showToast('已更新優先順序'); })
@@ -1702,17 +1657,6 @@ function renderTaskCard(t){
       +     '<button class="btn btn-sm" type="submit">更新連結</button>'
       +   '</div>'
       + '</form>'
-      + '<div style="margin-top:12px;">'
-      +   '<label class="field-label">或直接上傳檔案佐證（單檔最大 10MB）</label>'
-      +   '<input type="file" data-action="upload-evidence-file" data-id="'+t.id+'">'
-      +   '<div class="small-note" id="upload-status-'+t.id+'"></div>'
-      +   ((t.evidenceFiles && t.evidenceFiles.length) ? '<ul class="evidence-file-list">'+t.evidenceFiles.map(function(f){
-            return '<li>📄 <a href="'+escapeHtml(f.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'+escapeHtml(f.name)+'</a>'
-              + ' <span class="small-note">（'+formatFileSize(f.size)+'，'+escapeHtml(f.uploadedBy||'')+' 於 '+escapeHtml(f.uploadedAt||'')+' 上傳）</span>'
-              + ' <button class="btn-link" type="button" data-action="delete-evidence-file" data-id="'+t.id+'" data-path="'+escapeHtml(f.path)+'">刪除</button>'
-              + '</li>';
-          }).join('')+'</ul>' : '')
-      + '</div>'
       + '<button class="btn btn-ghost btn-sm" style="margin-top:14px;" data-action="delete-task" data-id="'+t.id+'">刪除此工作項目</button>';
   } else {
     body += '<div class="director-box"><label class="field-label">主任備註</label><div style="font-size:13px;">'+(t.directorComment? escapeHtml(t.directorComment) : '<span class="small-note">尚無主任備註。</span>')+'</div></div>'
@@ -2330,37 +2274,6 @@ function bindGlobalEvents(){
     });
   });
 
-  document.querySelectorAll('[data-action="upload-evidence-file"]').forEach(function(input){
-    input.addEventListener('click', function(e){ e.stopPropagation(); });
-    input.addEventListener('change', function(){
-      const file = input.files[0];
-      if(!file) return;
-      const taskId = input.getAttribute('data-id');
-      const statusEl = document.getElementById('upload-status-'+taskId);
-      if(statusEl) statusEl.textContent = '上傳中… 0%';
-      uploadEvidenceFile(taskId, file, function(pct){
-        if(statusEl) statusEl.textContent = '上傳中… '+pct+'%';
-      }).then(function(){
-        if(statusEl) statusEl.textContent = '';
-        showToast('檔案上傳成功');
-      }).catch(function(err){
-        if(statusEl) statusEl.textContent = '';
-        showToast('上傳失敗：'+err.message, true);
-      });
-    });
-  });
-  document.querySelectorAll('[data-action="delete-evidence-file"]').forEach(function(btn){
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      if(!confirm('確定要刪除這個檔案嗎？此動作無法復原。')) return;
-      const taskId = btn.getAttribute('data-id');
-      const path = btn.getAttribute('data-path');
-      const t = findTask(taskId);
-      const f = t ? (t.evidenceFiles||[]).find(function(x){ return x.path===path; }) : null;
-      if(f) deleteEvidenceFile(taskId, f);
-    });
-  });
-
   const newBtn = document.querySelector('[data-action="new-task-open"]');
   if(newBtn) newBtn.addEventListener('click', function(){ state.modal='newTask'; showNewTaskModal(); });
 
@@ -2654,7 +2567,6 @@ function startApp(){
     firebase.initializeApp(FIREBASE_CONFIG);
     const authRef = firebase.auth();
     db = firebase.firestore();
-    try{ storage = firebase.storage(); }catch(e){ /* 若專案尚未啟用 Storage，先忽略，上傳功能會顯示錯誤提示 */ }
     try{
       db.settings({ experimentalForceLongPolling: true, useFetchStreams: false });
     }catch(e){ /* 若此 SDK 版本不支援該設定，略過即可，不影響其他功能 */ }
