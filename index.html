@@ -310,18 +310,28 @@
     messagingSenderId: "1012206857084",
     appId: "1:1012206857084:web:95ab07233d9adede0812f9"
   };
+  const EMAILJS_CONFIG = {
+    serviceId: "service_1w5mzt4",
+    templateNewTask: "template_s2k4mx9",   /* 新工作項目通知主任 */
+    templateReviewResult: "template_v9gtwr7", /* 審核結果通知同仁 */
+    publicKey: "aAlQUAV9bjYkMuDsr"
+  };
 </script>
 <!-- ==================================================================== -->
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <div id="app"><div class="empty">載入中…</div></div>
 <div id="toast"></div>
 
 <script>
 let db = null; /* Firestore 實例，連線成功後賦值 */
+try{
+  if(window.emailjs && EMAILJS_CONFIG.publicKey) emailjs.init({publicKey: EMAILJS_CONFIG.publicKey});
+}catch(e){ /* EmailJS 初始化失敗不影響系統其他功能，通知信會發送失敗但會被忽略 */ }
 
 /* ====================== 基礎設定 ====================== */
 const ROLES = ['主任','教保組長','教保員','總務','出納','社工'];
@@ -1094,7 +1104,45 @@ function createTask(data){
     logs: [{date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note: data.note || '建立工作項目。', progress:Number(data.progress)||0, status:data.status||'未開始'}]
   };
   addToRoster(data.assignee, data.role);
-  return ref.set(t); /* 回傳 Promise，呼叫端應等待真正寫入成功後才關閉視窗／清除草稿，避免使用者過早重新整理導致資料遺失 */
+  return ref.set(t).then(function(){
+    sendNewTaskEmail(t);
+  }); /* 回傳 Promise，呼叫端應等待真正寫入成功後才關閉視窗／清除草稿，避免使用者過早重新整理導致資料遺失 */
+}
+/* ====================== Email 通知（透過 EmailJS，純前端寄信，失敗不影響系統其他功能） ====================== */
+function findEmailByName(name){
+  const emails = Object.keys(state.staffDirectory);
+  for(let i=0;i<emails.length;i++){
+    if(state.staffDirectory[emails[i]].name === name) return emails[i];
+  }
+  return '';
+}
+function sendNewTaskEmail(t){
+  if(!window.emailjs || !EMAILJS_CONFIG.serviceId) return;
+  const cat = catInfo(t.category);
+  emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateNewTask, {
+    to_name: '主任',
+    staff_name: t.assignee || '',
+    task_title: t.title || '',
+    category: (cat && cat.label) || '',
+    indicator: t.indicator || '無',
+    start_date: t.startDate || '',
+    end_date: t.endDate || '未填',
+    app_link: 'https://renotzeng300-lang.github.io/datong-worktracker/'
+  }).catch(function(err){ console.warn('新工作通知信發送失敗（不影響工作項目已成功建立）：', err); });
+}
+function sendReviewResultEmail(t, reviewStatus, comment){
+  if(!window.emailjs || !EMAILJS_CONFIG.serviceId) return;
+  const toEmail = findEmailByName(t.assignee);
+  if(!toEmail) return; /* 找不到該同仁對應的 Email，靜默跳過，不影響批示功能本身 */
+  emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateReviewResult, {
+    to_email: toEmail,
+    to_name: t.assignee || '',
+    director_name: state.currentUser ? state.currentUser.name : '主任',
+    task_title: t.title || '',
+    review_status: reviewStatus || '',
+    comment: comment || '（無）',
+    app_link: 'https://renotzeng300-lang.github.io/datong-worktracker/'
+  }).catch(function(err){ console.warn('審核結果通知信發送失敗（不影響批示已成功儲存）：', err); });
 }
 function defaultCycle(){
   /* 預設帶入民國年度，方便標記評鑑梯次，例如 2026 -> 115年度 */
@@ -1139,7 +1187,10 @@ function setReview(taskId, reviewStatus, comment){
     reviewStatus: reviewStatus,
     directorComment: comment,
     logs: firebase.firestore.FieldValue.arrayUnion(logEntry)
-  }).then(function(){ showToast('已儲存主任批示'); }).catch(function(err){ showToast('儲存失敗：'+err.message, true); });
+  }).then(function(){
+    showToast('已儲存主任批示');
+    sendReviewResultEmail(t, reviewStatus, comment);
+  }).catch(function(err){ showToast('儲存失敗：'+err.message, true); });
 }
 function setReminder(taskId, dateStr){
   db.collection('tasks').doc(taskId).update({reminderDate: dateStr})
