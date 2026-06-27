@@ -1961,7 +1961,7 @@ function showNewTaskModal(presets){
   const assignees = state.roster.map(function(r){ return r.name; });
   overlay.innerHTML = ''
     + '<div class="modal">'
-    + '  <div class="modal-head"><h2>新增工作項目</h2><p>登打工作項目、負責人、執行期間與初始進度</p></div>'
+    + '  <div class="modal-head"><h2>新增工作項目</h2><p>登打工作項目、負責人與執行期間，新工作項目一律從 0% 開始</p></div>'
     + '  <div class="modal-body">'
     +     (draft ? '<div class="draft-banner">📝 已自動回復您上次未送出的草稿內容，確認無誤後可直接送出。</div>' : '')
     + '    <form id="new-task-form">'
@@ -1984,10 +1984,7 @@ function showNewTaskModal(presets){
     + '        <div class="field-block"><label class="field-label">開始日期</label><input class="full" type="date" name="startDate" value="'+escapeHtml(v('startDate', todayStr()))+'"></div>'
     + '        <div class="field-block"><label class="field-label">預計完成日期</label><input class="full" type="date" name="endDate" value="'+escapeHtml(v('endDate'))+'"></div>'
     + '      </div>'
-    + '      <div class="row-2">'
-    + '        <div class="field-block"><label class="field-label">初始進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+escapeHtml(v('progress','0'))+'"></div>'
-    + '        <div class="field-block"><label class="field-label">初始狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(v('status')===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
-    + '      </div>'
+    + '      <div class="field-block"><label class="field-label">初始狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(v('status')===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
     + '      <div class="field-block"><label class="field-label">提醒日期（選填）</label><input class="full" type="date" name="reminderDate" value="'+escapeHtml(v('reminderDate'))+'"></div>'
     + '      <div class="field-block"><label class="field-label">佐證資料連結（選填）</label><input class="full" type="text" name="evidenceUrl" value="'+escapeHtml(v('evidenceUrl'))+'" placeholder="貼上雲端硬碟、共用資料夾連結…"></div>'
     + '      <div class="field-block"><label class="field-label">說明（選填）</label><textarea name="note" placeholder="補充工作內容、依據或備註…">'+escapeHtml(v('note'))+'</textarea></div>'
