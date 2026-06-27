@@ -968,6 +968,23 @@ async function ensureSeedData(){
   }catch(e){}
 }
 
+/* ====================== 閒置自動登出（保護共用電腦輪班登入的帳號安全） ====================== */
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000; /* 15分鐘無操作即自動登出 */
+let lastActivityAt = Date.now();
+function resetActivityTimer(){ lastActivityAt = Date.now(); }
+['mousemove','mousedown','keydown','scroll','touchstart'].forEach(function(evt){
+  document.addEventListener(evt, resetActivityTimer, {passive:true});
+});
+setInterval(function(){
+  if(!state.firebaseUser) return; /* 尚未登入，不檢查 */
+  if(Date.now() - lastActivityAt < IDLE_TIMEOUT_MS) return;
+  firebase.auth().signOut().then(function(){
+    lastActivityAt = Date.now();
+    const app = document.getElementById('app');
+    if(app) app.innerHTML = '<div class="empty">⏱️ 閒置超過15分鐘，系統已自動將您登出，保護您與同仁的帳號安全（適合共用電腦輪班使用的情境）。<br>請重新整理頁面，用自己的帳號重新登入。<br><button class="btn btn-sm" style="margin-top:10px;" onclick="location.reload()">重新整理頁面</button></div>';
+  }).catch(function(){});
+}, 60*1000); /* 每60秒檢查一次 */
+
 function attachListeners(){
   db.collection('tasks').onSnapshot(function(snap){
     const all = snap.docs.map(function(d){ return d.data(); });
@@ -2118,6 +2135,7 @@ function showOnboardingGuide(){
     + '    <div style="margin-bottom:12px;"><b>⑤ 加入日曆</b>：有設定提醒日期的工作，可以一鍵加進 Google 日曆，或下載到手機行事曆，不容易忘記。</div>'
     + '    <div style="margin-bottom:12px;"><b>⑥ 「指標」「評鑑面向」是什麼？</b>：這些是政府評鑑表上用的分類名稱，方便日後歸檔對應的佐證資料。滑鼠移到工作項目上的指標標籤（手機長按），可以看到主任填寫的詳細說明。填寫工作項目時，如果不確定該選哪一個，<b>可以先留白或隨意選一個</b>，之後請主任協助確認調整即可，不用因為這個卡住。</div>'
     +     (isDirector ? '    <div style="margin-bottom:12px;"><b>⑦ 主任專屬分頁</b>：「同仁總覽」「每週彙總」可以一眼看出誰的進度該關心了；「人員帳號管理」可以幫新同仁建立帳號；不小心刪除的工作，可以到「資源回收桶」找回來。</div>' : '')
+    + '    <div style="margin-bottom:12px;"><b>⑧ 畫面放著太久會自動登出</b>：如果15分鐘內沒有任何操作，系統會自動登出，這是為了共用電腦輪班使用時的帳號安全，不是系統壞了，重新整理頁面再登入即可。</div>'
     + '    <div class="small-note" style="margin-top:6px;">之後忘記怎麼操作，都可以點右上角的「？使用說明」再看一次。</div>'
     + '  </div>'
     + '  <div class="modal-foot"><button class="btn btn-primary" id="onboarding-close">知道了，開始使用</button></div>'
