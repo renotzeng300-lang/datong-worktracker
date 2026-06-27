@@ -137,8 +137,9 @@
   .task-list{display:flex; flex-direction:column; gap:10px;}
   .task-card{
     background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-    box-shadow:var(--shadow); overflow:hidden;
+    box-shadow:var(--shadow); overflow:hidden; transition:box-shadow .3s, border-color .3s;
   }
+  .task-card-highlight{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
   .task-head{display:flex; gap:14px; align-items:center; padding:14px 16px; cursor:pointer;}
   .cat-stripe{width:5px; align-self:stretch; border-radius:4px; flex:none;}
   .task-main{flex:1; min-width:0;}
@@ -2271,6 +2272,14 @@ function bindGlobalEvents(){
       state.filter = {category:'all', assignee:'all', status:'all', keyword:''};
       state.openTaskId = id;
       render();
+      setTimeout(function(){
+        const card = document.querySelector('[data-task-id="'+id+'"]');
+        if(card){
+          card.scrollIntoView({behavior:'smooth', block:'start'});
+          card.classList.add('task-card-highlight');
+          setTimeout(function(){ card.classList.remove('task-card-highlight'); }, 1600);
+        }
+      }, 50);
     });
   });
 
