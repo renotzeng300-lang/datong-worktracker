@@ -2308,15 +2308,63 @@ function exportFullBackup(){
     showToast('備份失敗：'+err.message, true);
   }
 }
-function exportReport(){
+function showExportFilterModal(){
+  const role = state.currentUser.role;
+  const isDirectorUser = isDirectorRole(role);
+  const isTeamLeadUser = role==='教保組長';
+  let availableRoles, availableNames;
+  if(isDirectorUser){
+    availableRoles = ROLES.slice();
+    availableNames = state.roster.map(function(r){ return r.name; });
+  }else if(isTeamLeadUser){
+    availableRoles = ['教保組長','教保員'];
+    availableNames = state.roster.filter(function(r){ return r.role==='教保員' || r.name===state.currentUser.name; }).map(function(r){ return r.name; });
+  }else{
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'export-filter-overlay';
+  overlay.innerHTML = ''
+    + '<div class="modal">'
+    + '  <div class="modal-head"><h2>匯出報表篩選</h2><p>可以勾選想要匯出的角色與負責人，都不勾代表不限制（匯出全部）。'+(isTeamLeadUser?'（您的匯出範圍僅限教保員與您自己）':'')+'</p></div>'
+    + '  <div class="modal-body">'
+    + '    <div class="field-block"><label class="field-label">篩選角色（可多選）</label><div>'
+    +        availableRoles.map(function(r){ return '<label style="display:inline-flex; align-items:center; gap:5px; margin:4px 10px 4px 0; font-size:13px;"><input type="checkbox" class="export-filter-role" value="'+escapeHtml(r)+'"> '+escapeHtml(r)+'</label>'; }).join('')
+    + '    </div></div>'
+    + '    <div class="field-block"><label class="field-label">篩選負責人（可多選）</label><div>'
+    +        availableNames.map(function(n){ return '<label style="display:inline-flex; align-items:center; gap:5px; margin:4px 10px 4px 0; font-size:13px;"><input type="checkbox" class="export-filter-name" value="'+escapeHtml(n)+'"> '+escapeHtml(n)+'</label>'; }).join('')
+    + '    </div></div>'
+    + '  </div>'
+    + '  <div class="modal-foot"><button class="btn" id="export-filter-cancel">取消</button><button class="btn btn-primary" id="export-filter-confirm">套用篩選並匯出</button></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  function close(){ overlay.remove(); }
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) close(); });
+  document.getElementById('export-filter-cancel').addEventListener('click', close);
+  document.getElementById('export-filter-confirm').addEventListener('click', function(){
+    const roles = Array.prototype.slice.call(document.querySelectorAll('.export-filter-role:checked')).map(function(el){ return el.value; });
+    const names = Array.prototype.slice.call(document.querySelectorAll('.export-filter-name:checked')).map(function(el){ return el.value; });
+    let filtered = state.tasks.slice();
+    if(isTeamLeadUser){
+      filtered = filtered.filter(function(t){ return t.role==='教保員' || t.assignee===state.currentUser.name; });
+    }
+    if(roles.length) filtered = filtered.filter(function(t){ return roles.indexOf(t.role)!==-1; });
+    if(names.length) filtered = filtered.filter(function(t){ return names.indexOf(t.assignee)!==-1; });
+    close();
+    exportReport(filtered);
+  });
+}
+function exportReport(tasksOverride){
   if(typeof XLSX==='undefined'){
     showToast('匯出元件尚在載入，請稍候幾秒再試一次', true);
     return;
   }
   try{
+    const sourceTasks = tasksOverride || state.tasks;
     const wb = XLSX.utils.book_new();
 
-    const taskRows = state.tasks.map(function(t){
+    const taskRows = sourceTasks.map(function(t){
       const lastLog = t.logs[t.logs.length-1] || {};
       return {
         '評鑑梯次': t.cycle||'',
@@ -2340,19 +2388,19 @@ function exportReport(){
         '建立日期': t.createdAt
       };
     });
-    const ws1 = XLSX.utils.json_to_sheet(taskRows.length?taskRows:[{'提示':'目前尚無工作項目'}]);
+    const ws1 = XLSX.utils.json_to_sheet(taskRows.length?taskRows:[{'提示':'目前篩選範圍內沒有工作項目'}]);
     XLSX.utils.book_append_sheet(wb, ws1, '工作項目清單');
 
     const indRows = effectiveIndicators().map(function(ind){
       const c = state.indicatorChecklist[ind.code] || {};
-      const linked = tasksForIndicator(ind.code);
+      const linked = sourceTasks.filter(function(t){ return matchIndicatorCode(t.indicator)===ind.code.toUpperCase(); });
       return {
         '指標編號': ind.code,
         '評鑑面向': catInfo(ind.category).label,
         '指標名稱': ind.title,
         '標籤': [ind.isCore?'核心指標':'', ind.isNew?'新增指標':'', ind.noScore?'不計分':''].filter(Boolean).join('、'),
         '備妥狀態': indicatorStatus(ind.code),
-        '對應工作項目數': linked.length,
+        '對應工作項目數（篩選範圍內）': linked.length,
         '對應工作項目': linked.map(function(t){ return t.title; }).join('；'),
         '佐證資料連結': c.evidenceUrl||'',
         '備註': c.note||''
@@ -2361,14 +2409,16 @@ function exportReport(){
     const ws2 = XLSX.utils.json_to_sheet(indRows);
     XLSX.utils.book_append_sheet(wb, ws2, '指標對照表');
 
-    const catRows = categoryStats().map(function(c){
-      return {'評鑑面向':c.cat.label, '工作項目數':c.count, '平均進度(%)':c.avg};
+    const catRows = CATEGORIES.map(function(cat){
+      const catTasks = sourceTasks.filter(function(t){ return t.category===cat.id; });
+      const avg = catTasks.length ? Math.round(catTasks.reduce(function(s,t){ return s+(t.progress||0); }, 0)/catTasks.length) : 0;
+      return {'評鑑面向':cat.label, '工作項目數':catTasks.length, '平均進度(%)':avg};
     });
     const ws3 = XLSX.utils.json_to_sheet(catRows.length?catRows:[{'評鑑面向':'尚無資料','工作項目數':0,'平均進度(%)':0}]);
     XLSX.utils.book_append_sheet(wb, ws3, '各面向進度彙總');
 
     XLSX.writeFile(wb, '大同發展中心工作管理報表_'+todayStr()+'.xlsx');
-    showToast('已匯出報表');
+    showToast('已匯出報表（共 '+sourceTasks.length+' 項工作項目）');
   }catch(e){
     showToast('匯出失敗，請再試一次', true);
   }
@@ -2465,7 +2515,15 @@ function bindGlobalEvents(){
   if(newBtn) newBtn.addEventListener('click', function(){ state.modal='newTask'; showNewTaskModal(); });
 
   const exportBtn = document.getElementById('export-report-btn');
-  if(exportBtn) exportBtn.addEventListener('click', exportReport);
+  if(exportBtn) exportBtn.addEventListener('click', function(){
+    const role = state.currentUser.role;
+    if(isDirectorRole(role) || role==='教保組長'){
+      showExportFilterModal();
+    }else{
+      const myTasks = state.tasks.filter(function(t){ return t.assignee===state.currentUser.name; });
+      exportReport(myTasks);
+    }
+  });
 
   const backupBtn = document.getElementById('backup-export-btn');
   if(backupBtn) backupBtn.addEventListener('click', exportFullBackup);
