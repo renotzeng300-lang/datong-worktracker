@@ -1197,6 +1197,12 @@ function defaultCycle(){
   const y = new Date().getFullYear() - 1911;
   return y + '年度';
 }
+function deriveProgressFromStatus(currentProgress, status){
+  if(status==='未開始') return 0;
+  if(status==='已完成') return 100;
+  /* 進行中／落後待調整：維持原有進度不變；若原本是0，給一個代表性的中間值，避免進度圈一直停在0% */
+  return (currentProgress>0) ? currentProgress : 50;
+}
 function addLog(taskId, note, progress, status){
   const t = findTask(taskId); if(!t) return Promise.reject(new Error('找不到工作項目'));
   const logEntry = {id: genId(), date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note:note, progress:Number(progress), status:status};
@@ -1657,10 +1663,7 @@ function renderLogEntry(t, l, idx){
     return '<div class="log-entry log-entry-editing">'
       + '<form data-action="edit-log" data-id="'+t.id+'" data-idx="'+idx+'">'
       +   '<div class="field-block"><label class="field-label">修改執行說明</label><textarea name="note" required>'+escapeHtml(l.note)+'</textarea></div>'
-      +   '<div class="row-2">'
-      +     '<div class="field-block"><label class="field-label">進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+(l.progress||0)+'"></div>'
-      +     '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
-      +   '</div>'
+      +   '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(l.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
       +   '<div style="display:flex; gap:8px;">'
       +     '<button class="btn btn-primary btn-sm" type="submit">儲存修改</button>'
       +     '<button class="btn btn-ghost btn-sm" type="button" data-action="cancel-edit-log">取消</button>'
@@ -1733,10 +1736,7 @@ function renderTaskCard(t){
     try{ draftNote = localStorage.getItem('dt-log-draft-'+t.id) || ''; }catch(e){}
     body += '<form data-action="add-log" data-id="'+t.id+'">'
       + '<div class="field-block"><label class="field-label">登打本次執行說明</label><textarea name="note" class="log-draft-input" data-task-id="'+t.id+'" placeholder="說明本次進度、遇到的問題或已完成事項…" required>'+escapeHtml(draftNote)+'</textarea></div>'
-      + '<div class="row-2">'
-      +   '<div class="field-block"><label class="field-label">最新進度（%）</label><input class="full" type="number" name="progress" min="0" max="100" step="5" value="'+(t.progress||0)+'"></div>'
-      +   '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(t.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
-      + '</div>'
+      + '<div class="field-block"><label class="field-label">狀態</label><select class="full" name="status">'+STATUSES.map(function(s){ return '<option value="'+s+'"'+(t.status===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></div>'
       + '<button class="btn btn-primary btn-sm" type="submit">送出更新</button>'
       + '</form>';
   } else {
@@ -2587,13 +2587,16 @@ function bindGlobalEvents(){
       e.preventDefault();
       const id = form.getAttribute('data-id');
       const fd = new FormData(form);
+      const t = findTask(id);
+      const newStatus = fd.get('status');
+      const newProgress = deriveProgressFromStatus(t ? t.progress : 0, newStatus);
       const submitBtn = form.querySelector('button[type="submit"]');
       if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = '儲存中…請稍候'; }
       state.saving = true;
       const slowNoticeId = setTimeout(function(){
         if(submitBtn) submitBtn.textContent = '仍在嘗試上傳…網路連線較慢，請耐心等候';
       }, 8000);
-      addLog(id, fd.get('note'), fd.get('progress'), fd.get('status')).then(function(){
+      addLog(id, fd.get('note'), newProgress, newStatus).then(function(){
         clearTimeout(slowNoticeId);
         state.saving = false;
         try{ localStorage.removeItem('dt-log-draft-'+id); }catch(err){}
@@ -2631,9 +2634,13 @@ function bindGlobalEvents(){
       const id = form.getAttribute('data-id');
       const idx = Number(form.getAttribute('data-idx'));
       const fd = new FormData(form);
+      const t = findTask(id);
+      const originalLog = t ? t.logs[idx] : null;
+      const newStatus = fd.get('status');
+      const newProgress = deriveProgressFromStatus(originalLog ? originalLog.progress : 0, newStatus);
       const submitBtn = form.querySelector('button[type="submit"]');
       if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = '儲存中…'; }
-      editLog(id, idx, fd.get('note'), fd.get('progress'), fd.get('status')).then(function(){
+      editLog(id, idx, fd.get('note'), newProgress, newStatus).then(function(){
         state.editingLogKey = null;
         showToast('已修改這筆紀錄');
         render();
