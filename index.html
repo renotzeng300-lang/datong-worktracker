@@ -253,6 +253,19 @@
   .activity-row{display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px dashed var(--line); font-size:13px;}
   .activity-row:last-child{border-bottom:none;}
   .staff-board-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin-bottom:20px;}
+  .kanban-board{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; align-items:start;}
+  @media (max-width:900px){ .kanban-board{grid-template-columns:1fr 1fr;} }
+  @media (max-width:600px){ .kanban-board{grid-template-columns:1fr;} }
+  .kanban-col-head{font-weight:700; font-size:13.5px; margin-bottom:8px; display:flex; align-items:center; gap:6px; color:var(--ink);}
+  .kanban-count{background:var(--line); color:var(--ink-soft); font-size:11px; padding:1px 7px; border-radius:10px;}
+  .kanban-dropzone{background:#F4F1E9; border:1.5px dashed var(--line); border-radius:10px; padding:8px; min-height:80px; display:flex; flex-direction:column; gap:8px; transition:background .15s, border-color .15s;}
+  .kanban-dropzone-over{background:var(--accent-soft); border-color:var(--accent);}
+  .kanban-card{background:#fff; border:1px solid var(--line); border-radius:8px; padding:9px 10px; cursor:grab; box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .kanban-card-overdue{border-color:var(--warn);}
+  .kanban-dragging{opacity:.4;}
+  .kanban-card-title{font-size:13px; font-weight:600; margin-bottom:6px; line-height:1.4;}
+  .kanban-card-meta{display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-soft); margin-bottom:5px;}
+  .kanban-card-detail-link{font-size:11px; color:var(--accent); text-decoration:underline; cursor:pointer; display:inline-block; margin-top:6px;}
   .sb-card .panel-pad{padding:16px 18px;}
   .sb-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px;}
   .sb-who{display:flex; align-items:center; gap:10px; min-width:0;}
@@ -1345,6 +1358,7 @@ function renderTabsAndBody(){
     + tabBtn('overview','總覽')
     + tabBtn('mine','我的工作')
     + tabBtn('all','全部工作')
+    + tabBtn('kanban','看板')
     + tabBtn('indicators','指標對照表');
   if(isDirector){
     tabsHtml += tabBtn('staffBoard','同仁總覽');
@@ -1360,6 +1374,7 @@ function renderTabsAndBody(){
   if(state.activeTab==='overview') body = renderOverview();
   else if(state.activeTab==='mine') body = renderTaskListPanel('mine');
   else if(state.activeTab==='all') body = renderTaskListPanel('all');
+  else if(state.activeTab==='kanban') body = renderKanbanBoard();
   else if(state.activeTab==='indicators') body = renderIndicatorPanel();
   else if(state.activeTab==='staffBoard' && isDirector) body = renderStaffBoard();
   else if(state.activeTab==='weeklyDigest' && isDirector) body = renderWeeklyDigest();
@@ -1426,7 +1441,7 @@ function statCard(num,label,cls){
   return '<div class="stat-card '+(cls||'')+'"><div class="num">'+num+'</div><div class="lbl">'+label+'</div></div>';
 }
 
-function renderFilterBar(){
+function renderFilterBar(hideStatus){
   const assignees = state.roster.map(function(r){ return r.name; });
   return '<div class="filter-bar">'
     + '<input type="text" class="full" style="max-width:200px;" placeholder="🔍 搜尋工作名稱、說明、負責人…" data-action="filter-keyword" value="'+escapeHtml(state.filter.keyword||'')+'">'
@@ -1438,10 +1453,11 @@ function renderFilterBar(){
     +   '<option value="all">全部負責人</option>'
     +   assignees.map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(state.filter.assignee===a?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')
     + '</select>'
-    + '<select data-action="filter-status">'
-    +   '<option value="all">全部狀態</option>'
-    +   STATUSES.map(function(s){ return '<option value="'+s+'"'+(state.filter.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
-    + '</select>'
+    +   (hideStatus ? '' :
+      '<select data-action="filter-status">'
+      +   '<option value="all">全部狀態</option>'
+      +   STATUSES.map(function(s){ return '<option value="'+s+'"'+(state.filter.status===s?' selected':'')+'>'+s+'</option>'; }).join('')
+      + '</select>')
     + '<div class="spacer"></div>'
     + '<button class="btn btn-primary" data-action="new-task-open">＋ 新增工作項目</button>'
     + '</div>';
@@ -1455,6 +1471,59 @@ function renderTaskListPanel(scope){
     return html;
   }
   html += '<div class="task-list">' + tasks.map(renderTaskCard).join('') + '</div>';
+  return html;
+}
+
+/* ====================== 看板拖拉視圖 ====================== */
+function kanbanVisibleTasks(){
+  let list = state.tasks.slice();
+  if(state.filter.category!=='all'){ list = list.filter(function(t){ return t.category===state.filter.category; }); }
+  if(state.filter.assignee!=='all'){ list = list.filter(function(t){ return t.assignee===state.filter.assignee; }); }
+  const kw = (state.filter.keyword||'').trim().toLowerCase();
+  if(kw){
+    list = list.filter(function(t){
+      const haystack = [t.title, t.indicator, t.assignee, t.note, (t.logs||[]).map(function(l){ return l.note; }).join(' ')].join(' ').toLowerCase();
+      return haystack.indexOf(kw) !== -1;
+    });
+  }
+  return list;
+}
+function updateTaskStatusViaDrag(taskId, newStatus){
+  const t = findTask(taskId); if(!t) return;
+  if(t.status === newStatus) return;
+  let newProgress = t.progress;
+  if(newStatus==='已完成') newProgress = 100;
+  if(newStatus==='未開始') newProgress = 0;
+  const logEntry = {id:genId(), date:todayStr(), author: state.currentUser?state.currentUser.name:'未知', note:'（透過看板拖曳）狀態由「'+(t.status||'')+'」變更為「'+newStatus+'」', progress:newProgress, status:newStatus};
+  const newReviewStatus = (newStatus==='已完成' && t.reviewStatus!=='已核可') ? '待審核' : t.reviewStatus;
+  db.collection('tasks').doc(taskId).update({
+    status: newStatus, progress: newProgress, reviewStatus: newReviewStatus,
+    logs: firebase.firestore.FieldValue.arrayUnion(logEntry)
+  }).catch(function(err){ showToast('更新失敗：'+err.message, true); });
+}
+function renderKanbanCard(t){
+  const overdue = isOverdue(t);
+  return '<div class="kanban-card'+(overdue?' kanban-card-overdue':'')+'" draggable="true" data-id="'+t.id+'">'
+    + '<div class="kanban-card-title">'+(overdue?'⚠️ ':'')+escapeHtml(t.title)+'</div>'
+    + '<div class="kanban-card-meta"><span>👤 '+escapeHtml(t.assignee||'未指派')+'</span><span>'+(t.progress||0)+'%</span></div>'
+    + '<div class="track"><div class="fill" style="width:'+(t.progress||0)+'%; background:'+(overdue?'var(--warn)':'var(--accent)')+'"></div></div>'
+    + '<span class="kanban-card-detail-link" data-action="kanban-open-detail" data-id="'+t.id+'">查看詳情 →</span>'
+    + '</div>';
+}
+function renderKanbanBoard(){
+  const tasks = kanbanVisibleTasks();
+  let html = renderFilterBar(true);
+  html += '<div class="kanban-board">';
+  html += STATUSES.map(function(status){
+    const colTasks = tasks.filter(function(t){ return (t.status||'未開始')===status; });
+    const cardsHtml = colTasks.length ? colTasks.map(renderKanbanCard).join('') : '<div class="small-note" style="padding:6px;">（沒有工作項目）</div>';
+    return '<div>'
+      + '  <div class="kanban-col-head">'+escapeHtml(status)+'<span class="kanban-count">'+colTasks.length+'</span></div>'
+      + '  <div class="kanban-dropzone" data-status="'+escapeHtml(status)+'">'+cardsHtml+'</div>'
+      + '</div>';
+  }).join('');
+  html += '</div>';
+  html += '<div class="small-note" style="margin-top:12px;">💡 直接用滑鼠把卡片拖到另一欄，就能改變工作狀態。手機／平板觸控目前不支援拖曳，請改用「我的工作」「全部工作」清單畫面操作狀態下拉選單。</div>';
   return html;
 }
 
@@ -2175,6 +2244,35 @@ function bindGlobalEvents(){
 
   const onboardingBtn = document.querySelector('[data-action="show-onboarding"]');
   if(onboardingBtn) onboardingBtn.addEventListener('click', function(){ showOnboardingGuide(); });
+
+  document.querySelectorAll('.kanban-card').forEach(function(card){
+    card.addEventListener('dragstart', function(e){
+      e.dataTransfer.setData('text/plain', card.getAttribute('data-id'));
+      card.classList.add('kanban-dragging');
+    });
+    card.addEventListener('dragend', function(){ card.classList.remove('kanban-dragging'); });
+  });
+  document.querySelectorAll('.kanban-dropzone').forEach(function(zone){
+    zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('kanban-dropzone-over'); });
+    zone.addEventListener('dragleave', function(){ zone.classList.remove('kanban-dropzone-over'); });
+    zone.addEventListener('drop', function(e){
+      e.preventDefault();
+      zone.classList.remove('kanban-dropzone-over');
+      const taskId = e.dataTransfer.getData('text/plain');
+      const newStatus = zone.getAttribute('data-status');
+      if(taskId) updateTaskStatusViaDrag(taskId, newStatus);
+    });
+  });
+  document.querySelectorAll('[data-action="kanban-open-detail"]').forEach(function(link){
+    link.addEventListener('click', function(e){
+      e.stopPropagation();
+      const id = link.getAttribute('data-id');
+      state.activeTab = 'all';
+      state.filter = {category:'all', assignee:'all', status:'all', keyword:''};
+      state.openTaskId = id;
+      render();
+    });
+  });
 
   const newBtn = document.querySelector('[data-action="new-task-open"]');
   if(newBtn) newBtn.addEventListener('click', function(){ state.modal='newTask'; showNewTaskModal(); });
