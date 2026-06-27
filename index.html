@@ -334,7 +334,8 @@ try{
 }catch(e){ /* EmailJS 初始化失敗不影響系統其他功能，通知信會發送失敗但會被忽略 */ }
 
 /* ====================== 基礎設定 ====================== */
-const ROLES = ['主任','教保組長','教保員','總務','出納','社工'];
+const ROLES = ['主任','督導','教保組長','教保員','總務','出納','社工'];
+function isDirectorRole(role){ return role==='主任' || role==='督導'; }
 const CATEGORIES = [
   {id:'admin',   label:'行政組織及經營管理', color:'var(--cat-admin)',   soft:'var(--cat-admin-soft)'},
   {id:'finance', label:'會計及財務管理',     color:'var(--cat-finance)', soft:'var(--cat-finance-soft)'},
@@ -558,7 +559,7 @@ function staffActivity(){
 
 
 /* ====================== 同仁總覽看板（依人員彙整手上工作與最近更新狀況） ====================== */
-function staffBoardData(){
+function staffBoardData(roleFilter){
   const lastByName = {};
   state.tasks.forEach(function(t){
     t.logs.forEach(function(l){
@@ -568,7 +569,9 @@ function staffBoardData(){
     });
   });
   const today = todayStr();
-  return state.roster.map(function(r){
+  let roster = state.roster;
+  if(roleFilter){ roster = roster.filter(function(r){ return r.role===roleFilter; }); }
+  return roster.map(function(r){
     const last = lastByName[r.name] || null;
     let days = null;
     if(last){ days = Math.round((new Date(today) - new Date(last)) / 86400000); }
@@ -634,10 +637,10 @@ function renderSelfReminderBanner(){
     + '</div>';
 }
 
-function renderStaffBoard(){
-  const data = staffBoardData();
+function renderStaffBoard(roleFilter){
+  const data = staffBoardData(roleFilter);
   if(data.length===0){
-    return '<div class="panel"><div class="empty">尚未設定任何人員，請先到「人員帳號管理」分頁新增同仁。</div></div>';
+    return '<div class="panel"><div class="empty">'+(roleFilter?'目前還沒有「'+escapeHtml(roleFilter)+'」角色的同仁，請先請主任到「人員帳號管理」分頁新增。':'尚未設定任何人員，請先到「人員帳號管理」分頁新增同仁。')+'</div></div>';
   }
   let html = '<div class="small-note" style="margin-bottom:14px;">依「最近一次登打紀錄」由久到近排序，越久沒更新的同仁排在越前面，方便您優先關心。綠色＝近期有更新／黃色＝3-6天沒動靜／橘紅＝7天以上沒更新或尚無紀錄。</div>';
   html += '<div class="staff-board-grid">';
@@ -1032,6 +1035,9 @@ function visibleTasks(scope){
   if(scope==='mine' && state.currentUser){
     list = list.filter(function(t){ return t.assignee===state.currentUser.name; });
   }
+  if(scope==='team' && state.currentUser){
+    list = list.filter(function(t){ return t.role==='教保員' || t.assignee===state.currentUser.name; });
+  }
   if(state.filter.category!=='all'){ list = list.filter(function(t){ return t.category===state.filter.category; }); }
   if(state.filter.assignee!=='all'){ list = list.filter(function(t){ return t.assignee===state.filter.assignee; }); }
   if(state.filter.status!=='all'){ list = list.filter(function(t){ return t.status===state.filter.status; }); }
@@ -1391,6 +1397,7 @@ function renderHeader(){
   + '  <div class="header-actions">'
   + '    <button class="btn btn-sm" data-action="show-onboarding" type="button">？使用說明</button>'
   + '    <button class="export-btn" id="export-report-btn">📤 匯出報表</button>'
+  +   (isDirectorRole(u.role) ? '    <button class="btn btn-sm" id="backup-export-btn">📦 完整資料備份</button>' : '')
   + '    <div class="user-chip">'
   + '      <span>👤 <b>'+escapeHtml(u.name)+'</b> <span style="opacity:.75;font-size:11px;">('+escapeHtml(u.email||'')+')</span></span>'
   + '      <span class="role-tag">'+escapeHtml(u.role)+'</span>'
@@ -1401,7 +1408,8 @@ function renderHeader(){
 }
 
 function renderTabsAndBody(){
-  const isDirector = state.currentUser.role==='主任';
+  const isDirector = isDirectorRole(state.currentUser.role);
+  const isTeamLead = state.currentUser.role==='教保組長';
   const reviewCount = state.tasks.filter(function(t){
     return t.reviewStatus==='待審核' || isOverdue(t);
   }).length;
@@ -1412,6 +1420,9 @@ function renderTabsAndBody(){
     + tabBtn('all','全部工作')
     + tabBtn('kanban','看板')
     + tabBtn('indicators','指標對照表');
+  if(isTeamLead){
+    tabsHtml += tabBtn('team','我的團隊');
+  }
   if(isDirector){
     tabsHtml += tabBtn('staffBoard','同仁總覽');
     tabsHtml += tabBtn('weeklyDigest','每週彙總');
@@ -1427,6 +1438,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='mine') body = renderTaskListPanel('mine');
   else if(state.activeTab==='all') body = renderTaskListPanel('all');
   else if(state.activeTab==='kanban') body = renderKanbanBoard();
+  else if(state.activeTab==='team' && isTeamLead) body = renderTeamPanel();
   else if(state.activeTab==='indicators') body = renderIndicatorPanel();
   else if(state.activeTab==='staffBoard' && isDirector) body = renderStaffBoard();
   else if(state.activeTab==='weeklyDigest' && isDirector) body = renderWeeklyDigest();
@@ -1447,7 +1459,7 @@ function renderOverview(){
   const s = computeStats();
   const cats = categoryStats();
   const ind = indicatorStats();
-  const isDirector = state.currentUser.role==='主任';
+  const isDirector = isDirectorRole(state.currentUser.role);
   let html = '<div class="stat-grid">'
     + statCard(s.total,'工作項目總數','')
     + statCard(s.inProgress,'進行中','good')
@@ -1523,6 +1535,20 @@ function renderTaskListPanel(scope){
     return html;
   }
   html += '<div class="task-list">' + tasks.map(renderTaskCard).join('') + '</div>';
+  return html;
+}
+
+function renderTeamPanel(){
+  let html = '<div class="section-title" style="margin-bottom:6px;">教保員總覽</div>';
+  html += renderStaffBoard('教保員');
+  html += '<div class="section-title" style="margin:24px 0 6px;">團隊工作清單（含您自己）</div>';
+  const tasks = visibleTasks('team');
+  html += renderFilterBar();
+  if(tasks.length===0){
+    html += '<div class="panel"><div class="empty"><div class="big">📋</div>找不到符合篩選條件的工作項目。</div></div>';
+  }else{
+    html += '<div class="task-list">' + tasks.map(renderTaskCard).join('') + '</div>';
+  }
   return html;
 }
 
@@ -1613,7 +1639,7 @@ function renderTaskCard(t){
   const circumference = 113.1;
   const offset = circumference * (1 - (t.progress||0)/100);
   const overdue = isOverdue(t);
-  const isDirector = state.currentUser.role==='主任';
+  const isDirector = isDirectorRole(state.currentUser.role);
   const canEdit = isDirector || t.assignee===state.currentUser.name;
   const priority = t.priority || '中';
 
@@ -2003,7 +2029,7 @@ function onboardingSeenKey(){
 }
 function showOnboardingGuide(){
   if(document.getElementById('onboarding-overlay')) return;
-  const isDirector = state.currentUser && state.currentUser.role==='主任';
+  const isDirector = state.currentUser && isDirectorRole(state.currentUser.role);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'onboarding-overlay';
@@ -2181,6 +2207,32 @@ function closeNewTaskModal(){
 }
 
 /* ====================== 匯出報表 ====================== */
+function exportFullBackup(){
+  try{
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      exportedBy: state.currentUser ? state.currentUser.name : '未知',
+      tasks: state.tasks,
+      deletedTasks: state.deletedTasks || [],
+      roster: state.roster,
+      staffDirectory: state.staffDirectory,
+      indicatorChecklist: state.indicatorChecklist
+    };
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], {type:'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'datong-worktracker-備份-'+todayStr()+'.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    showToast('已下載完整資料備份檔，請存放在安全的地方（例如雲端硬碟）');
+  }catch(err){
+    showToast('備份失敗：'+err.message, true);
+  }
+}
 function exportReport(){
   if(typeof XLSX==='undefined'){
     showToast('匯出元件尚在載入，請稍候幾秒再試一次', true);
@@ -2339,6 +2391,9 @@ function bindGlobalEvents(){
 
   const exportBtn = document.getElementById('export-report-btn');
   if(exportBtn) exportBtn.addEventListener('click', exportReport);
+
+  const backupBtn = document.getElementById('backup-export-btn');
+  if(backupBtn) backupBtn.addEventListener('click', exportFullBackup);
 
   const indCatSel = document.querySelector('[data-action="ind-filter-category"]');
   if(indCatSel) indCatSel.addEventListener('change', function(){ state.indFilter.category = indCatSel.value; render(); });
