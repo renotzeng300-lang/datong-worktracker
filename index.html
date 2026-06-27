@@ -429,7 +429,37 @@ const INDICATORS = [
   {code:'7301', category:'other', title:'污物處理空間', isNew:true, description:'標準：有獨立之污物處理空間，應提供污物沖洗、消毒泡浸、污物暫放之基本設施設備，污物動線應避免直接穿越用餐區、配膳室、廚房等空間。每一級分加0.3分，至多加總分0.3分。｜評鑑實施方式：現場實務觀察評估，必要時與工作人員晤談。'}
 ];
 
-/* ====================== 指標管理（主任可自行新增/編輯/停用，因應未來評鑑指標改版） ====================== */
+/* ====================== 下次評鑑（第12次）預告新增規定 ======================
+   來源：109年度評鑑指標公告文件最後一頁「指標預告」。
+   這些規定尚未正式生效、目前評鑑不列入計分，僅供機構提前準備參考，
+   故獨立於 INDICATORS 之外，不會出現在「新增工作」的指標選單或現行指標對照表裡。 */
+const NEXT_CYCLE_PREVIEW = [
+  {
+    relatedCode: '1105', relatedTitle: '員工訓練情形', category: 'admin',
+    title: '機構其他人員感染管制訓練（預告新增標準）',
+    content: '機構其他人員（除直接服務人員之外）每年至少接受4小時感染管制訓練課程。級分規範：符合1項／不符標準（1分）。'
+  },
+  {
+    relatedCode: '3104', relatedTitle: '有無避難逃生路徑及等待救援空間', category: 'env',
+    title: '中央空調連動切斷電源（預告新增標準）',
+    content: '火災時，設有中央空氣調節系統者，應具有以火警自動警報設備等方式連動切斷電源開關功能，防止火煙蔓延。級分規範：符合1項／不符標準（1分）。'
+  },
+  {
+    relatedCode: '3106-1', relatedTitle: '訂定符合機構特性及需要之緊急災害（EOP）應變計畫及作業程序，並落實演練', category: 'env',
+    title: '加嚴版緊急災害演練頻率（預告新增標準）',
+    content: '每年應實施緊急災害應變演練4次，包括複合型緊急災害應變演練1次及夜間演練1次（均含火災演練），其中2次可採桌上模擬討論，並以模擬家屬及服務對象參與，且有演練之腳本、過程、演練後之檢討會議及檢討修正方案。級分規範：符合1項／不符標準（1分）。'
+  },
+  {
+    relatedCode: '4203-2', relatedTitle: '（全新指標編號，目前現行指標清單中尚無此編號）', category: 'pro',
+    title: '性別教育支持措施（預告全新指標）',
+    content: '依服務對象之生理發展及人際互動需求、學習特質，規劃：1.合宜之性平教育內涵（性別認識、性別尊重、隱私、交友、婚姻、懷孕/避孕等）。2.性騷擾及性侵害防治教育。3.多元化性平教育策略。4.若服務對象有其他特殊需求，提供相關支持。以上皆需要有執行紀錄。總分4分，級分規範：符合標準／符合3項／符合2項／符合1項／不符標準。'
+  },
+  {
+    relatedCode: '4303-B', relatedTitle: '管灌服務對象餵食情形（重度失能機構適評）', category: 'pro',
+    title: '天然攪打食物（預告新增標準）',
+    content: '針對食用灌食配方者，每日應至少提供1次天然攪打食物（如：果汁、蔬菜汁、蔬果汁等）。級分規範：符合1項／不符標準（1分）。'
+  }
+];
 function effectiveIndicators(){
   const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
   const hidden = ov.hidden || [];
@@ -1440,6 +1470,7 @@ function renderTabsAndBody(){
     tabsHtml += tabBtn('weeklyDigest','每週彙總');
     tabsHtml += tabBtn('review','審核與提醒', reviewCount);
     tabsHtml += tabBtn('indManage','指標管理');
+    tabsHtml += tabBtn('nextCycle','下次評鑑預告');
     tabsHtml += tabBtn('staffManage','人員帳號管理');
     tabsHtml += tabBtn('trash','資源回收桶', (state.deletedTasks||[]).length || null);
   }
@@ -1456,6 +1487,7 @@ function renderTabsAndBody(){
   else if(state.activeTab==='weeklyDigest' && isDirector) body = renderWeeklyDigest();
   else if(state.activeTab==='review' && isDirector) body = renderReviewPanel();
   else if(state.activeTab==='indManage' && isDirector) body = renderIndicatorManagePanel();
+  else if(state.activeTab==='nextCycle' && isDirector) body = renderNextCyclePreview();
   else if(state.activeTab==='staffManage' && isDirector) body = renderStaffManagePanel();
   else if(state.activeTab==='trash' && isDirector) body = renderTrashPanel();
 
@@ -1875,6 +1907,31 @@ function renderIndicatorPanel(){
   return html;
 }
 
+function renderNextCyclePreview(){
+  let html = '<div class="panel" style="margin-bottom:18px; border-color:#D9C9A8;">'
+    + '  <div class="panel-pad">'
+    + '    <div class="section-title">⚠️ 下次評鑑（第12次）預告新增規定</div>'
+    + '    <div class="section-sub">這些是官方公告文件最後一頁「指標預告」裡，<b>下一次評鑑才會正式生效</b>的新增規定。<b>目前評鑑不會列入計分</b>，不會出現在「指標對照表」或「新增工作」的指標選單裡，這裡只是先幫您記錄下來，方便提前準備、預先安排相關工作項目，等正式公告生效後再正式納入追蹤。</div>'
+    + '  </div>'
+    + '</div>';
+
+  html += NEXT_CYCLE_PREVIEW.map(function(p){
+    const cat = catInfo(p.category);
+    return '<div class="panel" style="margin-bottom:14px;">'
+      + '  <div class="panel-pad">'
+      + '    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">'
+      + '      <span class="cat-badge" style="background:'+cat.soft+'; color:'+cat.color+'">'+cat.label+'</span>'
+      + '      <span class="tag-new">'+(p.relatedCode.indexOf('全新')!==-1 || p.relatedTitle.indexOf('全新指標編號')!==-1 ? '全新指標' : '既有指標加嚴')+'</span>'
+      + '    </div>'
+      + '    <div style="font-weight:700; font-size:14.5px; margin-bottom:4px;">'+escapeHtml(p.title)+'</div>'
+      + '    <div class="small-note" style="margin-bottom:8px;">對應指標：'+escapeHtml(p.relatedCode)+'　'+escapeHtml(p.relatedTitle)+'</div>'
+      + '    <div style="font-size:13.5px; color:var(--ink); line-height:1.6;">'+escapeHtml(p.content)+'</div>'
+      + '  </div>'
+      + '</div>';
+  }).join('');
+
+  return html;
+}
 function renderIndicatorManagePanel(){
   const ov = state.indicatorOverrides || {custom:[], hidden:[], edits:{}};
   const hidden = ov.hidden || [];
