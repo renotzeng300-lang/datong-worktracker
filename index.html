@@ -1514,6 +1514,7 @@ function renderTabsAndBody(){
   }).length;
 
   let tabsHtml = '<div class="tabs">'
+    + tabBtn('guide','📖 操作指南')
     + tabBtn('overview','總覽')
     + tabBtn('mine','我的工作')
     + tabBtn('all','全部工作')
@@ -1534,7 +1535,8 @@ function renderTabsAndBody(){
   tabsHtml += '</div>';
 
   let body = '';
-  if(state.activeTab==='overview') body = renderOverview();
+  if(state.activeTab==='guide') body = renderGuide();
+  else if(state.activeTab==='overview') body = renderOverview();
   else if(state.activeTab==='mine') body = renderTaskListPanel('mine');
   else if(state.activeTab==='all') body = renderTaskListPanel('all');
   else if(state.activeTab==='kanban') body = renderKanbanBoard();
@@ -2152,6 +2154,178 @@ function renderTrashPanel(){
 function onboardingSeenKey(){
   return 'dt-onboarding-seen-'+normalizeEmail(state.firebaseUser ? state.firebaseUser.email : '');
 }
+/* ====================== 操作指南（依角色顯示對應的圖文教學） ====================== */
+function guideSec(title, bodyHtml){
+  return `<div class="panel" style="margin-bottom:18px;">
+    <div class="panel-pad">
+      <div class="section-title">${title}</div>
+      <div style="margin-top:10px; font-size:13.5px; line-height:1.75; color:var(--ink);">${bodyHtml}</div>
+    </div>
+  </div>`;
+}
+function gImg(src, caption){
+  return `<div style="margin:14px 0; text-align:center;">
+    <img src="guide/${src}" alt="${escapeHtml(caption||'')}" style="max-width:100%; border:1px solid var(--line); border-radius:8px; box-shadow:0 1px 6px rgba(0,0,0,.08);">
+    ${caption? `<div class="small-note" style="margin-top:6px;">${escapeHtml(caption)}</div>` : ''}
+  </div>`;
+}
+function gSteps(items){
+  return `<ol style="margin:8px 0; padding-left:22px;">${items.map(function(i){ return '<li style="margin-bottom:6px;">'+i+'</li>'; }).join('')}</ol>`;
+}
+function gList(items){
+  return `<ul style="margin:8px 0; padding-left:20px;">${items.map(function(i){ return '<li style="margin-bottom:6px;">'+i+'</li>'; }).join('')}</ul>`;
+}
+function gTip(title, text){
+  return `<div style="background:#FBF3E3; border:1px solid #D9C9A8; border-radius:8px; padding:10px 14px; margin:12px 0;">
+    <div style="font-weight:700; color:#9C6B1F; margin-bottom:4px;">💡 ${escapeHtml(title)}</div>
+    <div>${text}</div>
+  </div>`;
+}
+function renderGuide(){
+  const role = state.currentUser.role;
+  const isDirector = isDirectorRole(role);
+  const isTeamLead = role==='教保組長';
+  const roleLabel = isDirector ? '主任／督導' : (isTeamLead ? '教保組長' : '社工／教保員／總務／出納');
+
+  let html = `<div class="small-note" style="margin-bottom:14px;">這份操作指南會依您目前登入的角色（<b>${escapeHtml(roleLabel)}</b>）自動顯示相關內容，圖片就是系統實際畫面的截圖。</div>`;
+
+  // ===== 共同章節：登入與基本介面 =====
+  html += guideSec('登入與基本介面', `
+    <p>用瀏覽器（手機或電腦皆可）開啟系統網址，或點桌面／主畫面上的捷徑圖示，輸入 Email 與密碼登入。忘記密碼可以點登入畫面下方「忘記密碼？」，系統會寄重設密碼信到您的 Email。</p>
+    ${gImg('g-login.png', '登入畫面')}
+    <div class="section-title" style="font-size:14px; margin-top:18px;">加到手機主畫面（建議所有人都設定）</div>
+    <p>設定一次之後，手機桌面會出現一個像 App 一樣的圖示，點一下就直接進入系統，不用每次打開瀏覽器、打網址或翻收藏。</p>
+    <p><b>Android（Chrome）：</b>打開系統網址 → 右上角「⋮」選單 → 「安裝應用程式」（或「新增至主畫面」）→ 確認後按「安裝」</p>
+    <p><b>iPhone（務必用 Safari，Chrome 沒有這功能）：</b>打開系統網址 → 點下方「分享」圖示 → 往下滑「加入主畫面」→ 按「加入」</p>
+    ${gTip('閒置自動登出', '畫面開著超過 15 分鐘沒有任何操作，系統會自動登出，保護帳號安全，特別適合同仁共用電腦輪班登入的情境。重新整理頁面、再次登入即可繼續使用。')}
+  `);
+
+  // ===== 共同章節：登打進度 =====
+  const taskOpenImg = isDirector ? 'g-d-taskopen.png' : (isTeamLead ? 'g-l-taskopen.png' : 'g-w-taskopen.png');
+  html += guideSec('我的工作：登打進度（最常用的操作）', `
+    <p>「我的工作」只顯示指派給您自己的項目。點工作卡片任一處即可展開／收合詳情。</p>
+    ${gImg(taskOpenImg, '展開工作項目，登打進度')}
+    ${gSteps([
+      '展開後可以看到「執行情形紀錄」，列出過去每一次的登打歷史。',
+      '在「登打本次執行說明」欄位寫下這次的進度、遇到的問題或完成事項（必填，不能空白）。',
+      '在「狀態」選單選擇目前狀態：未開始／進行中／已完成／落後待調整。',
+      '按「送出更新」即完成。'
+    ])}
+    ${gTip('進度的百分比不用自己算！', '選好狀態後，系統會自動換算進度百分比（未開始＝0%，已完成＝100%，進行中／落後待調整則維持原本的數字不變），不需要自己估算填寫精確數字。')}
+    ${gTip('打錯字怎麼辦？', '自己登打過的紀錄旁邊都有「✏️ 修改這筆紀錄」，可以自己修改文字、狀態，不用麻煩別人。修改後會清楚標示「此紀錄已修改過」，兼顧方便跟可信度。')}
+    <div class="section-title" style="font-size:14px; margin-top:18px;">新增工作項目</div>
+    ${gSteps([
+      '在「我的工作」或「全部工作」右上角點「＋ 新增工作項目」。',
+      '填寫工作名稱、評鑑面向、指標編號（不確定可先留白）、負責人、執行期間。',
+      '按「建立」，新工作會自動發信通知主任。'
+    ])}
+    <div class="section-title" style="font-size:14px; margin-top:18px;">設定提醒日期、加入手機行事曆</div>
+    ${gList([
+      '「📅 加入 Google 日曆」：跳出新增事件畫面，標題日期已填好，按「儲存」即可。',
+      '「⬇️ 下載 .ics」：可匯入 Outlook、手機原生行事曆等。'
+    ])}
+  `);
+
+  // ===== 共同章節：看板 =====
+  const kanbanImg = isDirector ? 'g-d-kanban.png' : (isTeamLead ? 'g-l-kanban.png' : 'g-w-kanban.png');
+  html += guideSec('看板', `
+    <p>把工作項目依「未開始／進行中／已完成／落後待調整」分成四欄，每張卡片顯示負責人跟進度。</p>
+    ${gImg(kanbanImg, '看板畫面')}
+    ${gList([
+      '電腦瀏覽器可直接用滑鼠把卡片拖到另一欄，狀態就會自動改變（拖到「已完成」進度自動變100%，拖到「未開始」自動歸零）。',
+      '手機／平板觸控目前不支援拖曳，請改用清單畫面的狀態下拉選單操作。',
+      '卡片上「查看詳情 →」會跳到「全部工作」分頁並自動展開、捲動到該筆項目。'
+    ])}
+  `);
+
+  // ===== 共同章節：指標對照表 =====
+  const indImg = isDirector ? null : (isTeamLead ? null : 'g-w-indicators.png');
+  html += guideSec('指標對照表', `
+    <p>列出官方公告的評鑑指標，方便確認您負責的工作對應到哪個指標、準備度如何。滑鼠移到指標標籤上（手機長按），會顯示官方標準內容說明，不用翻評鑑手冊對照。</p>
+    ${indImg ? gImg(indImg, '指標對照表畫面') : ''}
+    ${gTip('「指標」「評鑑面向」是什麼？', '這些是政府評鑑表上用的分類名稱，方便日後歸檔對應的佐證資料。填寫工作項目時，如果不確定該選哪一個，可以先留白或隨意選一個，之後請主任協助確認調整即可，不用因為這個卡住。')}
+  `);
+
+  // ===== 教保組長專屬 =====
+  if(isTeamLead){
+    html += guideSec('我的團隊（教保組長專屬功能）', `
+      <p>不用主任親自看，自己就能掌握底下「教保員」角色同仁的進度。</p>
+      ${gImg('g-l-team.png', '我的團隊畫面')}
+      ${gList([
+        '上半部「教保員總覽」：每位教保員一張卡片，越久沒更新排在越前面。● 綠色＝近期有更新／▲ 黃色＝3-6天沒動靜／■ 橘紅＝7天以上沒更新或尚無紀錄。',
+        '下半部「團隊工作清單」：列出所有教保員與您自己的工作項目，可用篩選列縮小範圍。'
+      ])}
+      ${gTip('範圍說明', '目前「我的團隊」會顯示所有教保員角色的同仁，不是只有特定某位組長底下的那一群——系統目前還沒有「分組歸屬」的設計，如有需要請反映給主任。')}
+    `);
+    html += guideSec('匯出報表', `
+      <p>點 header 上的「📤 匯出報表」，會看到篩選視窗，選項只會有「教保員」跟「您自己」，不會看到其他角色（跟「我的團隊」能看到的範圍一致）。</p>
+    `);
+  }
+
+  // ===== 主任／督導專屬 =====
+  if(isDirector){
+    html += guideSec('總覽', `
+      <p>登入後第一個看到的畫面，掌握整體評鑑準備狀況。</p>
+      ${gImg('g-d-overview.png', '總覽畫面')}
+      ${gList([
+        '四個數字卡：工作項目總數、進行中、已完成、已逾期／待留意。',
+        '「各評鑑面向執行進度」：7大評鑑面向的平均進度條。',
+        '「指標準備度」：核心指標未備妥會用橘色警示框提醒——沒過會導致評鑑等第降一等。',
+        '「最新執行動態」：全機構所有同仁最近登打的紀錄。'
+      ])}
+    `);
+    html += guideSec('同仁總覽（主任專屬）', `
+      <p>不用一個一個問，就能掌握每位同仁進度。</p>
+      ${gImg('g-d-staffboard.png', '同仁總覽畫面')}
+      <p>排序方式是「越久沒更新的同仁排在越前面」，顏色標籤：● 綠色＝近期有更新／▲ 黃色＝3-6天沒動靜／■ 橘紅＝7天以上沒更新或尚無紀錄。</p>
+    `);
+    html += guideSec('每週彙總（主任專屬）', `
+      <p>開週會、晨會前，掌握「這週誰做了什麼、誰完全沒動靜」。</p>
+      ${gImg('g-d-weekly.png', '每週彙總畫面')}
+      <p>彙整範圍是「本週一到今天」，自動重新計算；本週完全沒更新的同仁排在最前面並用橘紅色標示。</p>
+    `);
+    html += guideSec('審核與提醒（主任專屬）', `
+      <p>集中顯示所有「待審核」跟「逾期」的工作項目，以及每位同仁的活躍度。</p>
+      ${gImg('g-d-review.png', '審核與提醒畫面')}
+    `);
+    html += guideSec('指標管理（主任專屬）', `
+      <p>調整官方評鑑指標清單，或補充機構自己的說明。</p>
+      ${gImg('g-d-indmanage.png', '指標管理畫面')}
+      ${gSteps([
+        '找到要編輯的指標，點「編輯」。',
+        '「指標說明」欄位建議貼上官方評鑑手冊裡的具體標準內容——填寫後，同仁滑鼠移到指標標籤就會看到。',
+        '也可以新增自訂指標、或停用不適用的指標（停用不會刪除既有工作項目資料）。'
+      ])}
+    `);
+    html += guideSec('下次評鑑預告（主任專屬）', `
+      <p>記錄官方公告文件裡「下一次評鑑才會正式生效」的預告新增規定，目前不會列入計分。</p>
+      ${gImg('g-d-nextcycle.png', '下次評鑑預告畫面')}
+    `);
+    html += guideSec('人員帳號管理（主任專屬）', `
+      <p>建立新同仁帳號、設定角色、處理離職交接，都不需要跳到 Firebase 後台。</p>
+      ${gImg('g-d-staffmanage.png', '人員帳號管理畫面')}
+      ${gSteps([
+        '輸入新同仁 Email、選角色、輸入姓名。',
+        '全新帳號按「產生密碼」自動帶出密碼（已有帳號可留空密碼，只更新姓名角色）。',
+        '按「建立／更新帳號」，馬上複製畫面顯示的 Email／密碼告知新同仁——離開畫面後不會再顯示。'
+      ])}
+      ${gTip('同仁離職時', '移除帳號前，如果他名下還有未完成的工作，系統會強制要求您先選一位同仁接手，才能完成移除，避免交接遺漏。')}
+    `);
+    html += guideSec('資源回收桶（主任專屬）', `
+      <p>刪除工作項目不會立刻消失，會先移到這裡。</p>
+      ${gImg('g-d-trash.png', '資源回收桶畫面')}
+      <p>「↩️ 復原」可以救回；「永久刪除」才是真的、無法復原地刪除。</p>
+    `);
+    html += guideSec('匯出報表．完整資料備份．Email 通知', `
+      <p><b>匯出報表：</b>點「📤 匯出報表」可篩選角色與負責人後匯出 Excel，含工作項目清單、指標對照表、各面向進度彙總。</p>
+      <p><b>完整資料備份：</b>點「📦 完整資料備份」下載 JSON 完整備份檔，建議每月固定下載一次存放在雲端硬碟。這是手動備份，不會自動執行。</p>
+      <p><b>Email 通知：</b>同仁新增工作會自動發信通知主任；主任批改後會自動發信通知該同仁。寄信失敗不影響系統操作本身。</p>
+    `);
+  }
+
+  return html;
+}
+
 function showOnboardingGuide(){
   if(document.getElementById('onboarding-overlay')) return;
   const isDirector = state.currentUser && isDirectorRole(state.currentUser.role);
@@ -2170,7 +2344,7 @@ function showOnboardingGuide(){
     + '    <div style="margin-bottom:12px;"><b>⑥ 「指標」「評鑑面向」是什麼？</b>：這些是政府評鑑表上用的分類名稱，方便日後歸檔對應的佐證資料。滑鼠移到工作項目上的指標標籤（手機長按），可以看到主任填寫的詳細說明。填寫工作項目時，如果不確定該選哪一個，<b>可以先留白或隨意選一個</b>，之後請主任協助確認調整即可，不用因為這個卡住。</div>'
     +     (isDirector ? '    <div style="margin-bottom:12px;"><b>⑦ 主任專屬分頁</b>：「同仁總覽」「每週彙總」可以一眼看出誰的進度該關心了；「人員帳號管理」可以幫新同仁建立帳號；不小心刪除的工作，可以到「資源回收桶」找回來。</div>' : '')
     + '    <div style="margin-bottom:12px;"><b>⑧ 畫面放著太久會自動登出</b>：如果15分鐘內沒有任何操作，系統會自動登出，這是為了共用電腦輪班使用時的帳號安全，不是系統壞了，重新整理頁面再登入即可。</div>'
-    + '    <div class="small-note" style="margin-top:6px;">之後忘記怎麼操作，都可以點右上角的「？使用說明」再看一次。</div>'
+    + '    <div class="small-note" style="margin-top:6px;">這裡只是快速重點，完整圖文教學請點分頁列最前面的「📖 操作指南」，裡面有系統實際畫面截圖跟詳細步驟，隨時可以回來查看。</div>'
     + '  </div>'
     + '  <div class="modal-foot"><button class="btn btn-primary" id="onboarding-close">知道了，開始使用</button></div>'
     + '</div>';
