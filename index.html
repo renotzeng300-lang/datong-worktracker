@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1E4A40">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -66,11 +66,12 @@
   }
   .brand{display:flex; align-items:center; gap:10px;}
   .brand-mark{
-    width:34px; height:34px; border-radius:9px;
-    background:#F4F8F6; color:var(--accent-ink);
+    width:42px; height:42px; border-radius:50%;
+    background:#FFFFFF;
     display:flex; align-items:center; justify-content:center;
-    font-weight:700; font-size:15px; flex:none;
+    flex:none; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.18);
   }
+  .brand-mark img{width:100%; height:100%; object-fit:contain;}
   .brand-text h1{font-size:15.5px; font-weight:700; margin:0;}
   .brand-text p{font-size:11.5px; margin:0; opacity:.78;}
   .user-chip{
@@ -1391,7 +1392,7 @@ function renderLoginScreen(){
   return ''
   + '<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;">'
   + '  <div class="modal" style="max-width:420px;">'
-  + '    <div class="modal-head"><h2>大同發展中心工作管理平台</h2><p>請使用機構配發的帳號登入</p></div>'
+  + '    <div class="modal-head" style="text-align:center;"><img src="logo-horizontal.png" alt="臺北市大同發展中心" style="max-width:100%; height:auto; margin-bottom:6px;"><p>請使用機構配發的帳號登入</p></div>'
   + '    <div class="modal-body">'
   + '      <div class="field-block"><label class="field-label">Email</label><input class="full" type="email" id="login-email" placeholder="例如：staff01@gmail.com" autocomplete="username"></div>'
   + '      <div class="field-block"><label class="field-label">密碼</label><input class="full" type="password" id="login-password" placeholder="請輸入密碼" autocomplete="current-password"></div>'
@@ -1488,7 +1489,7 @@ function renderHeader(){
   return ''
   + '<div class="app-header">'
   + '  <div class="brand">'
-  + '    <div class="brand-mark">同</div>'
+  + '    <div class="brand-mark"><img src="logo-circle.png" alt="大同發展中心"></div>'
   + '    <div class="brand-text"><h1>大同發展中心 · 工作管理平台</h1><p>身心障礙福利機構評鑑對應任務追蹤</p></div>'
   + '  </div>'
   + '  <div class="header-actions">'
