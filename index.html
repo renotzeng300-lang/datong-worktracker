@@ -318,6 +318,10 @@
   .sb-task-top{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:4px;}
   .sb-task-title{color:var(--ink); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .sb-task-pct{color:var(--ink-soft); font-family:ui-monospace,monospace; flex:none;}
+  .preset-block{
+    background:var(--accent-soft); border:1px solid var(--accent); border-radius:8px;
+    padding:12px 14px; margin-bottom:16px;
+  }
   .draft-banner{
     background:var(--accent-soft); border:1px solid #CFE3DC; border-radius:8px;
     padding:8px 12px; font-size:12px; color:var(--accent-ink); margin-bottom:12px;
@@ -385,6 +389,95 @@ const CATEGORIES = [
   {id:'innov',   label:'改進或創新',         color:'var(--cat-innov)',   soft:'var(--cat-innov-soft)'},
   {id:'other',   label:'其他行政庶務',       color:'var(--cat-other)',   soft:'var(--cat-other-soft)'}
 ];
+/* ====================== 常用工作項目快速帶入（依角色分組） ======================
+   每項格式：{ label: 下拉顯示名稱, title: 工作項目名稱, category: 評鑑面向id, indicator: 指標編號（可空白）}
+   來源：工作細流_評鑑指標對照.xlsx「總務任務清單」「出納任務清單」兩個分頁 */
+const TASK_PRESETS = {
+  '總務': [
+    {label:'【每日】收文登錄', title:'公文收文登錄（電子公文及紙本同步留存）', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每月】出缺勤統計表', title:'員工出缺勤統計表整理', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每月】個人出勤明細表', title:'個人出勤明細表製作與發放確認', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每月】健保勞保勞退單位負擔統計', title:'健保、勞保、勞退單位負擔金額統計', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每月】飲水機維管系統登錄', title:'公私場所飲用水設備維管系統紀錄及上傳', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【每月底】反針孔偷拍偵測', title:'反針孔偷拍偵測執行及紀錄', category:'rights', indicator:'5102 服務對象隱私保護'},
+    {label:'【每月】給團膳廠商訂餐數量', title:'當月給團膳廠商確認訂餐數量', category:'env', indicator:'3112 餐廳廚房之環境設備與餐具符合衛生原則'},
+    {label:'【每月】請團膳廠商提供菜單', title:'索取/確認團膳廠商菜單', category:'env', indicator:'3112 餐廳廚房之環境設備與餐具符合衛生原則'},
+    {label:'【次月初】團膳對帳單+發票核對', title:'向團膳廠商索取對帳單及發票並核對', category:'env', indicator:'3112 餐廳廚房之環境設備與餐具符合衛生原則'},
+    {label:'【每月】預支固定支出款申請', title:'預支固定支出款申請（行政系統）', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月最後一週】用電設備自主檢查', title:'用電設備自主檢查紀錄表填寫及用印', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【每月】大樓公攤水電費分攤製作', title:'大樓公攤水電費分攤表製作（每2個月）', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月】發電機保養', title:'B1低壓電力設備維護—發電機保養', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【每季】SGS水質檢測', title:'SGS飲水機水質檢測配合及發票留存', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【每季】飲水機更換濾心', title:'飲水機更換濾心（聯繫廠商傅昌生醫）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【每學期】環境消毒灑藥', title:'環境消毒灑藥（品欣企業社）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【每年4/15前】火險續約', title:'火險保單續約（旺旺產物保險）上傳社福系統2.0', category:'finance', indicator:'2103 財物管理'},
+    {label:'【每年8/19前】公共意外責任險續約', title:'公共意外責任險保單續約（富邦產險）上傳社福系統2.0', category:'finance', indicator:'2103 財物管理'},
+    {label:'【每年10月前】建物公安檢查申報', title:'建物公共安全檢查簽證及申報、上傳社福系統2.0', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【每半年】消防安全檢修申報', title:'消防安全設備半年期檢修申報、上傳社福系統2.0', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【每半年】機構用電設備檢測', title:'機構用電設備定期檢測（斷電+紅外線）', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【每年11月】團膳廠商年度續約', title:'團膳廠商年度續約（含HACCP資料下載）', category:'env', indicator:'3112 餐廳廚房之環境設備與餐具符合衛生原則'},
+    {label:'【每年11月】廚房瓦斯桶更換', title:'6F廚房瓦斯桶更換（第一煤氣）', category:'env', indicator:'3112 餐廳廚房之環境設備與餐具符合衛生原則'},
+    {label:'【每年底】公文系統年度彙整裝訂', title:'公文系統年度彙整（收文、發文裝訂）', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每年底】社會局代管財產年度結算', title:'社會局代管財產年初與年底總額結算', category:'finance', indicator:'2103 財物管理'},
+    {label:'【每年5-7月】社會局代管財產盤點', title:'社會局代管財產盤點（配合秘書室人員）', category:'finance', indicator:'2103 財物管理'},
+    {label:'【每年底】各月工作人員及服務人次統計', title:'各月工作人員統計、服務人次統計、各組別服務人數統計表', category:'finance', indicator:'2102 財務報告及管理作為'},
+    {label:'【每年申請】房屋建築養護費', title:'房屋建築養護費（設施設備維護費）申請', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【每年申請】設施設備更新修繕費', title:'設施設備更新修繕費申請', category:'finance', indicator:'2103 財物管理'},
+    {label:'【每年申請】機構服務費及營運管理費', title:'機構服務費及營運管理費申請', category:'admin', indicator:'1106-3 專業服務人力（教保員/訓練員）'},
+    {label:'【每年申請】早療專業服務費', title:'早療專業服務費申請', category:'admin', indicator:'1106-1 專業服務人力（社工人員）'},
+    {label:'【每年申請】工作人員獎勵金', title:'工作人員獎勵金申請（11/5前）', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每年申請】機構照顧服務人力補助', title:'機構照顧服務人力補助（資深工作人員專業服務費）申請', category:'admin', indicator:'1106 專業服務人力'},
+    {label:'【每年申請】交通費補助', title:'服務對象交通費補助申請', category:'pro', indicator:'4401 社區資源管理與運用'},
+    {label:'【不定期】添購中心常備日用品', title:'添購中心常備日用品（廁所用品、清潔劑、文具等）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【不定期】庫存領用登記表', title:'庫存領用登記表建立/盤點', category:'env', indicator:'3114 儲藏設施設置情形'},
+    {label:'【不定期】新生進中心繳費作業', title:'新生進中心繳費單開立及費用計算', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【不定期】新進人員建檔', title:'新進人員建檔（社福系統2.0及身障資訊整合平台）', category:'admin', indicator:'1103 機構配合情形'},
+    {label:'【不定期】離職人員異動建檔', title:'離職人員異動建檔（社福系統2.0及身障資訊整合平台）', category:'admin', indicator:'1103 機構配合情形'},
+    {label:'【小主委】西側電梯保養費用分攤表', title:'西側電梯保養及修繕費用分攤表製作', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【小主委】西側空調保養費用分攤表', title:'西側空調保養及修繕費用分攤表製作', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【大主委】水塔水池清洗', title:'大樓屋頂水塔及B1蓄水池清洗（一年2次）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【大主委】頂樓除草', title:'大樓頂樓花台及地面除草、排水孔清淤（一年2次）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【大主委】B1+B2清洗除塵', title:'B1+B2地下室清洗除塵（一年1次）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【大主委】B1+B2除蟲工程', title:'B1+B2地下室除蟲工程（一年2次）', category:'env', indicator:'3110 環境清潔衛生及廢棄物處理分類'},
+    {label:'【大主委】大樓消防設備檢查申報', title:'大樓消防設備年度檢查及簽證申報', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+    {label:'【大主委】大樓公安檢查申報', title:'大樓公共安全檢查及申報（兩年1次）', category:'env', indicator:'3105 建築物公共安全檢查簽證申報及消防安全設備設置'},
+  ],
+  '出納': [
+    {label:'【月初月底】向協會請款送單', title:'向協會找會計請款及送單', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月初】生日禮金請款', title:'當月同仁生日禮金零用金線上申請', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每月】零用金報銷撥補', title:'零用金報銷撥補結算及現金盤點紀錄', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月】登打捐款捐物明細/流向表', title:'捐款捐物明細表及捐物流向表登打', category:'finance', indicator:'2104 捐贈財物之管理徵信情形'},
+    {label:'【每月】萬芳復健治療費用領據', title:'萬芳醫院復健治療費用領據開立及寄送', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月初】給學費單及繳費袋', title:'寄發學費單及繳費袋、開立收據存入帳戶', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月1、16號】華南查帳明細核對', title:'華南銀行查帳明細核對並回報邱姐', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月中】影印機張數結算請款', title:'影印機張數結算請款（金儀股份有限公司）', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月底】托育養護補助請款', title:'托育養護補助（日間照顧費用補助）每月底請款', category:'admin', indicator:'1103 機構配合情形'},
+    {label:'【每月最後一週】時段堂數確認開收據', title:'與時段教保確認上課堂數、開立收據並存款', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月】中華電信繳費', title:'中華電信費用繳納', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每兩個月】台電繳費', title:'台電費用繳納（雙月）', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每月】大樓水費/電費帳單繳交', title:'大樓公攤水費（富邦銀行）及電費（合作金庫）繳交', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每半年】教育部幼兒獎助金', title:'教育部幼兒獎助金協助申請及撥款清冊製作', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每半年】延時收托補助核銷', title:'延時收托補助每半年核銷（含成果報告）', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每年底】個人薪資所得及講師費彙整', title:'個人薪資所得及各方案講師費年度彙整', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每年底】財產及現金盤點紀錄表', title:'財產盤點紀錄表及現金盤點紀錄表年度彙整', category:'finance', indicator:'2103 財物管理'},
+    {label:'【每年底】收支餘絀表/資產負債表', title:'收支餘絀表及資產負債表登錄社福系統2.0送審', category:'finance', indicator:'2102 財務報告及管理作為'},
+    {label:'【每年底】社會局補助機構申報所得清冊', title:'社會局補助機構申報所得清冊年度彙整', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每年底】定期捐款(物)者收據彙整寄出', title:'每月定期捐款(物)者收據年度彙整並寄出', category:'finance', indicator:'2104 捐贈財物之管理徵信情形'},
+    {label:'【每年】公辦民營機構財務查核', title:'配合政府委辦會計師事務所財務查核', category:'finance', indicator:'2102 財務報告及管理作為'},
+    {label:'【每年申請】延時收托補助申請', title:'延時收托補助申請及核銷', category:'finance', indicator:'2101 會計制度'},
+    {label:'【每年申請】機構服務費及營運管理費', title:'機構服務費及營運管理費申請', category:'admin', indicator:'1106-3 專業服務人力（教保員/訓練員）'},
+    {label:'【每年申請】早療專業服務費', title:'早療專業服務費申請', category:'admin', indicator:'1106-1 專業服務人力（社工人員）'},
+    {label:'【每年申請】機構照顧服務人力補助', title:'機構照顧服務人力補助申請', category:'admin', indicator:'1106 專業服務人力'},
+    {label:'【每年申請】工作人員獎勵金', title:'工作人員獎勵金申請（11/5前）', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【每年申請】交通費補助', title:'服務對象交通費補助申請', category:'pro', indicator:'4401 社區資源管理與運用'},
+    {label:'【不定期】新生進中心繳費作業', title:'新生進中心繳費單開立及費用計算', category:'admin', indicator:'1102 機構管理制度'},
+    {label:'【不定期】新進人員建檔', title:'新進人員建檔（社福系統2.0及身障資訊整合平台）', category:'admin', indicator:'1103 機構配合情形'},
+    {label:'【不定期】離職人員異動建檔', title:'離職人員異動建檔（社福系統2.0及身障資訊整合平台）', category:'admin', indicator:'1103 機構配合情形'},
+    {label:'【不定期】年度社會局補助列表維護', title:'年度社會局補助列表逐筆記錄更新', category:'finance', indicator:'2101 會計制度'},
+    {label:'【不定期】零錢箱管理', title:'大廳零錢箱管理（現金存款、開捐款收據）', category:'finance', indicator:'2104 捐贈財物之管理徵信情形'},
+    {label:'【大主委】大樓水電費帳單繳交', title:'大樓公攤水費電費帳單繳交', category:'finance', indicator:'2101 會計制度'},
+  ]
+};
 const STATUSES = ['未開始','進行中','已完成','落後/待調整'];
 const REVIEW_STATUSES = ['待審核','已核可','請補充說明'];
 
@@ -2407,11 +2500,26 @@ function showNewTaskModal(presets){
   overlay.className = 'modal-overlay';
   overlay.id = 'new-task-overlay';
   const assignees = state.roster.map(function(r){ return r.name; });
+  const rolePresets = TASK_PRESETS[state.currentUser.role] || [];
+  const presetBlock = rolePresets.length ? (
+    '<div class="preset-block">'
+    + '<label class="field-label" style="display:flex; align-items:center; gap:6px;">⚡ 快速帶入常用工作'
+    + '<span class="small-note">（依角色提供）</span></label>'
+    + '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">'
+    + '<select id="task-preset-select" style="flex:1; min-width:0;">'
+    + '<option value="">— 從常用工作清單選取，自動帶入名稱與指標 —</option>'
+    + rolePresets.map(function(p,i){ return '<option value="'+i+'">'+escapeHtml(p.label)+'</option>'; }).join('')
+    + '</select>'
+    + '</div>'
+    + '<div class="small-note" style="margin-top:4px;">選完後仍可自行修改所有欄位。</div>'
+    + '</div>'
+  ) : '';
   overlay.innerHTML = ''
     + '<div class="modal">'
     + '  <div class="modal-head"><h2>新增工作項目</h2></div>'
     + '  <div class="modal-body">'
     +     (draft ? '<div class="draft-banner">📝 已自動回復您上次未送出的草稿內容，確認無誤後可直接送出。</div>' : '')
+    + '    ' + presetBlock
     + '    <form id="new-task-form">'
     + '      <div class="field-block"><label class="field-label">工作項目名稱</label><input class="full" type="text" name="title" value="'+escapeHtml(v('title'))+'" placeholder="例如：更新工作手冊與緊急通報窗口資料" required></div>'
     + '      <div class="row-2">'
@@ -2443,6 +2551,27 @@ function showNewTaskModal(presets){
   document.body.appendChild(overlay);
 
   const form = document.getElementById('new-task-form');
+
+  /* 快速帶入下拉選單 */
+  const presetSel = document.getElementById('task-preset-select');
+  if(presetSel){
+    presetSel.addEventListener('change', function(){
+      const idx = parseInt(presetSel.value, 10);
+      if(isNaN(idx)) return;
+      const rolePresets2 = TASK_PRESETS[state.currentUser.role] || [];
+      const preset = rolePresets2[idx];
+      if(!preset) return;
+      const titleInput = form.querySelector('[name="title"]');
+      const categorySel = form.querySelector('[name="category"]');
+      const indicatorInput = form.querySelector('[name="indicator"]');
+      if(titleInput && !titleInput.value) titleInput.value = preset.title;
+      else if(titleInput && confirm('工作名稱欄位已有內容，要用快速帶入的內容取代嗎？')) titleInput.value = preset.title;
+      if(categorySel) categorySel.value = preset.category;
+      if(indicatorInput) indicatorInput.value = preset.indicator || '';
+      presetSel.value = ''; /* 重設選單，方便下次再選 */
+      titleInput && titleInput.focus();
+    });
+  }
   function saveDraft(){
     try{
       const fd = new FormData(form);
